@@ -1,5 +1,8 @@
 class BillItem {
+  static const defaultWalletId = 'wallet_default';
+
   final String id;
+  final String walletId;
   final String type; // 'expense' | 'income'
   final double amount;
   final String category;
@@ -12,6 +15,7 @@ class BillItem {
 
   const BillItem({
     required this.id,
+    this.walletId = defaultWalletId,
     required this.type,
     required this.amount,
     required this.category,
@@ -26,6 +30,7 @@ class BillItem {
   Map<String, dynamic> toMap() {
     return {
       'id': id,
+      'wallet_id': walletId,
       'type': type,
       'amount': amount,
       'category': category,
@@ -41,6 +46,7 @@ class BillItem {
   factory BillItem.fromMap(Map<String, dynamic> map) {
     return BillItem(
       id: map['id'] as String,
+      walletId: (map['wallet_id'] as String?) ?? defaultWalletId,
       type: map['type'] as String,
       amount: (map['amount'] as num).toDouble(),
       category: map['category'] as String,
@@ -55,6 +61,7 @@ class BillItem {
 
   BillItem copyWith({
     String? id,
+    String? walletId,
     String? type,
     double? amount,
     String? category,
@@ -67,6 +74,7 @@ class BillItem {
   }) {
     return BillItem(
       id: id ?? this.id,
+      walletId: walletId ?? this.walletId,
       type: type ?? this.type,
       amount: amount ?? this.amount,
       category: category ?? this.category,

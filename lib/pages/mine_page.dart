@@ -5,13 +5,16 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:file_picker/file_picker.dart';
 
 import '../data/account_data.dart';
+import '../models/bill_item.dart';
 import '../providers/bill_provider.dart';
 import '../providers/category_provider.dart';
 import '../providers/user_stats_provider.dart';
+import '../providers/wallet_provider.dart';
 import '../services/import_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/icon_helper.dart';
 import 'badge_page.dart';
+import '../widgets/wallet_switcher_sheet.dart';
 
 /// 「我的」页面
 ///
@@ -29,6 +32,8 @@ class MinePage extends ConsumerWidget {
         children: const [
           _MineHeader(),
           SizedBox(height: 36 + 12),
+          _WalletCard(),
+          SizedBox(height: 12),
           _AchievementCard(),
           SizedBox(height: 12),
           _ImportCard(),
@@ -169,6 +174,34 @@ class _StatsCard extends StatelessWidget {
               child: _StatCell(value: stats.totalDays, label: '记账总天数'),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _WalletCard extends ConsumerWidget {
+  const _WalletCard();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final walletAsync = ref.watch(currentWalletProvider);
+    final name = walletAsync.value?.name ?? '钱包1';
+    final id = walletAsync.value?.id ?? BillItem.defaultWalletId;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Material(
+        elevation: 0.4,
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(10),
+        child: ListTile(
+          contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+          leading: const Icon(Icons.account_balance_wallet_outlined, color: AppColors.primaryDark),
+          title: Text(name),
+          subtitle: Text(id),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: () => showWalletSwitcherSheet(context, ref),
         ),
       ),
     );

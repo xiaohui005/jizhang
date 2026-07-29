@@ -4,6 +4,7 @@ import '../data/account_data.dart';
 import '../db/database_helper.dart';
 import 'bill_provider.dart';
 import 'user_stats_provider.dart';
+import 'wallet_provider.dart';
 
 /// 徽章分类。顺序与「徽章页」分组顺序保持一致。
 ///
@@ -200,7 +201,10 @@ final badgeProvider = FutureProvider<BadgeData>((ref) async {
   // 监听账单变化，账单一旦增删都会自动刷新徽章页
   ref.watch(billListProvider);
   final stats = await ref.watch(userStatsProvider.future);
-  final iconCounts = await DatabaseHelper.instance.getBillCountGroupByIconId();
+  final walletId = await ref.watch(currentWalletIdProvider.future);
+  final iconCounts = await DatabaseHelper.instance.getBillCountGroupByIconId(
+    walletId: walletId,
+  );
 
   final sections = [
     for (final category in BadgeCategory.values)

@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../db/database_helper.dart';
 import '../models/bill_item.dart';
+import 'wallet_provider.dart';
 
 /// 当前选中的年月，格式 "2025-11"
 class SelectedMonthNotifier extends Notifier<String> {
@@ -22,9 +23,10 @@ class BillListNotifier extends AsyncNotifier<List<BillItem>> {
   final _db = DatabaseHelper.instance;
 
   @override
-  Future<List<BillItem>> build() {
+  Future<List<BillItem>> build() async {
     final month = ref.watch(selectedMonthProvider);
-    return _db.getBillsByMonth(month);
+    final walletId = await ref.watch(currentWalletIdProvider.future);
+    return _db.getBillsByMonth(month, walletId: walletId);
   }
 
   Future<void> add(BillItem bill) async {
@@ -73,10 +75,11 @@ class MonthlySummaryNotifier extends AsyncNotifier<MonthlySummary> {
   @override
   Future<MonthlySummary> build() async {
     final month = ref.watch(selectedMonthProvider);
+    final walletId = await ref.watch(currentWalletIdProvider.future);
     // 监听账单列表变化，自动刷新汇总
     ref.watch(billListProvider);
-    final income = await _db.getMonthlyIncome(month);
-    final expense = await _db.getMonthlyExpense(month);
+    final income = await _db.getMonthlyIncome(month, walletId: walletId);
+    final expense = await _db.getMonthlyExpense(month, walletId: walletId);
     return MonthlySummary(income: income, expense: expense);
   }
 }

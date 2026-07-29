@@ -8,6 +8,7 @@ import '../providers/bill_provider.dart';
 import '../providers/category_provider.dart';
 import '../providers/keyboard_provider.dart';
 import '../providers/navigation_provider.dart';
+import '../providers/wallet_provider.dart';
 import '../theme/app_theme.dart';
 import '../utils/icon_helper.dart';
 import 'category_settings_page.dart';
@@ -188,6 +189,7 @@ class _BillingPageState extends ConsumerState<BillingPage>
 
     final bill = BillItem(
       id: id,
+      walletId: ref.read(currentWalletIdProvider).value ?? BillItem.defaultWalletId,
       type: _currentType,
       amount: amount,
       category: cat.name,

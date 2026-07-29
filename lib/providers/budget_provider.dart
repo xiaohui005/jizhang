@@ -3,8 +3,10 @@ import 'dart:math';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../db/database_helper.dart';
+import '../models/bill_item.dart';
 import '../models/budget_item.dart';
 import 'bill_provider.dart';
+import 'wallet_provider.dart';
 
 /// 预算周期类型：月预算 / 年预算
 enum BudgetPeriodType { month, year }
@@ -59,6 +61,7 @@ class BudgetNotifier extends AsyncNotifier<BudgetData> {
   Future<BudgetData> build() async {
     final periodType = ref.watch(budgetPeriodProvider);
     final selectedMonth = ref.watch(selectedMonthProvider);
+    final walletId = await ref.watch(currentWalletIdProvider.future);
     // 监听账单变化，自动刷新支出
     ref.watch(billListProvider);
 
@@ -72,6 +75,7 @@ class BudgetNotifier extends AsyncNotifier<BudgetData> {
     final budgets = await _db.getBudgets(
       periodType: periodTypeStr,
       period: period,
+      walletId: walletId,
     );
 
     BudgetItem? total;
@@ -85,10 +89,13 @@ class BudgetNotifier extends AsyncNotifier<BudgetData> {
     }
     categoryBudgets.sort((a, b) => a.createdAt.compareTo(b.createdAt));
 
-    final categoryExpenses = await _db.getExpenseGroupByIconId(period);
+    final categoryExpenses = await _db.getExpenseGroupByIconId(
+      period,
+      walletId: walletId,
+    );
     final totalExpense = periodType == BudgetPeriodType.month
-        ? await _db.getMonthlyExpense(period)
-        : await _db.getYearlyExpense(period);
+        ? await _db.getMonthlyExpense(period, walletId: walletId)
+        : await _db.getYearlyExpense(period, walletId: walletId);
 
     return BudgetData(
       periodType: periodType,
@@ -106,12 +113,14 @@ class BudgetNotifier extends AsyncNotifier<BudgetData> {
   Future<double> saveTotalBudget(double amount) async {
     final data = state.value;
     if (data == null) return 0;
+    final walletId = await ref.read(currentWalletIdProvider.future);
     final periodType =
         data.periodType == BudgetPeriodType.month ? 'month' : 'year';
     final now = _nowStr();
     final existing = data.totalBudget;
     final budget = BudgetItem(
       id: existing?.id ?? _genId(),
+      walletId: walletId,
       periodType: periodType,
       period: data.period,
       isTotal: true,
@@ -145,6 +154,7 @@ class BudgetNotifier extends AsyncNotifier<BudgetData> {
       (b) => b.iconId == iconId,
       orElse: () => BudgetItem(
         id: '',
+        walletId: data.totalBudget?.walletId ?? BillItem.defaultWalletId,
         periodType: '',
         period: '',
         isTotal: false,
@@ -156,8 +166,10 @@ class BudgetNotifier extends AsyncNotifier<BudgetData> {
       ),
     );
     final isNew = existing.id.isEmpty;
+    final walletId = await ref.read(currentWalletIdProvider.future);
     final budget = BudgetItem(
       id: isNew ? _genId() : existing.id,
+      walletId: walletId,
       periodType: periodType,
       period: data.period,
       isTotal: false,
@@ -245,6 +257,7 @@ final monthlyTotalBudgetProvider = FutureProvider<double>((ref) async {
   final budgets = await DatabaseHelper.instance.getBudgets(
     periodType: 'month',
     period: month,
+    walletId: await ref.watch(currentWalletIdProvider.future),
   );
   for (final b in budgets) {
     if (b.isTotal) return b.amount;

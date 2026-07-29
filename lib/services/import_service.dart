@@ -195,7 +195,8 @@ class ImportService {
     }
 
     // 2. 导入账单
-    final allBills = await _db.getAllBills();
+    final walletId = await _db.getCurrentWalletId();
+    final allBills = await _db.getAllBills(walletId: walletId);
     final existingBillIds = allBills.map((b) => b.id).toSet();
     final now = DateTime.now().toIso8601String();
 
@@ -222,6 +223,7 @@ class ImportService {
 
       final bill = BillItem(
         id: id,
+        walletId: walletId,
         type: record.type,
         amount: record.amount,
         category: record.category,

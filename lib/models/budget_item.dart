@@ -6,7 +6,10 @@
 ///   为 false 时是分类预算（按 [iconId] 区分）
 /// - 分类预算固定使用支出类目（[CategoryItem.inEx] == 0）
 class BudgetItem {
+  static const defaultWalletId = 'wallet_default';
+
   final String id;
+  final String walletId;
   final String periodType;
   final String period;
   final bool isTotal;
@@ -18,6 +21,7 @@ class BudgetItem {
 
   const BudgetItem({
     required this.id,
+    this.walletId = defaultWalletId,
     required this.periodType,
     required this.period,
     required this.isTotal,
@@ -31,6 +35,7 @@ class BudgetItem {
   Map<String, dynamic> toMap() {
     return {
       'id': id,
+      'wallet_id': walletId,
       'period_type': periodType,
       'period': period,
       'is_total': isTotal ? 1 : 0,
@@ -45,6 +50,7 @@ class BudgetItem {
   factory BudgetItem.fromMap(Map<String, dynamic> map) {
     return BudgetItem(
       id: map['id'] as String,
+      walletId: (map['wallet_id'] as String?) ?? defaultWalletId,
       periodType: map['period_type'] as String,
       period: map['period'] as String,
       isTotal: (map['is_total'] as int) == 1,
@@ -58,6 +64,7 @@ class BudgetItem {
 
   BudgetItem copyWith({
     String? id,
+    String? walletId,
     String? periodType,
     String? period,
     bool? isTotal,
@@ -69,6 +76,7 @@ class BudgetItem {
   }) {
     return BudgetItem(
       id: id ?? this.id,
+      walletId: walletId ?? this.walletId,
       periodType: periodType ?? this.periodType,
       period: period ?? this.period,
       isTotal: isTotal ?? this.isTotal,

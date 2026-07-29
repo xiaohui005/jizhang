@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../db/database_helper.dart';
 import 'bill_provider.dart';
+import 'wallet_provider.dart';
 
 /// 「我的」页面顶部的用户记账统计
 class UserStats {
@@ -31,12 +32,13 @@ class UserStats {
 final userStatsProvider = FutureProvider<UserStats>((ref) async {
   // 任何账单变更（增/改/删）都会通过 billListProvider 重建本 Provider
   ref.watch(billListProvider);
+  final walletId = await ref.watch(currentWalletIdProvider.future);
 
   final db = DatabaseHelper.instance;
-  final count = await db.getTotalBillCount();
+  final count = await db.getTotalBillCount(walletId: walletId);
   if (count == 0) return UserStats.empty;
 
-  final dates = await db.getDistinctBillDates();
+  final dates = await db.getDistinctBillDates(walletId: walletId);
   final dateSet = dates.toSet();
   final totalDays = dateSet.length;
 

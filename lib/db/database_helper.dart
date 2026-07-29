@@ -1,15 +1,39 @@
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 import '../data/account_data.dart';
+import '../models/asset_item.dart';
 import '../models/bill_item.dart';
 import '../models/budget_item.dart';
 import '../models/category_entry.dart';
+import '../models/wallet_item.dart';
 
 class DatabaseHelper {
   DatabaseHelper._();
   static final DatabaseHelper instance = DatabaseHelper._();
 
   static Database? _database;
+  static String? _databasePathOverride;
+
+  static const _currentWalletSettingKey = 'current_wallet_id';
+  static const _defaultWalletId = BillItem.defaultWalletId;
+  static const _defaultWalletName = '钱包1';
+
+  String _walletClause(String base, String? walletId) {
+    if (walletId == null) return base;
+    return '$base AND wallet_id = ?';
+  }
+
+  static Future<void> resetForTest() async {
+    final db = _database;
+    _database = null;
+    if (db != null) {
+      await db.close();
+    }
+  }
+
+  static void overrideDatabasePathForTest(String? path) {
+    _databasePathOverride = path;
+  }
 
   Future<Database> get database async {
     if (_database != null) return _database!;
@@ -18,16 +42,17 @@ class DatabaseHelper {
   }
 
   Future<Database> _initDB() async {
-    final dbPath = await getDatabasesPath();
-    final path = join(dbPath, 'ledger.db');
+    final path = _databasePathOverride ??
+        join(await getDatabasesPath(), 'ledger.db');
 
     return openDatabase(
       path,
-      version: 6,
+      version: 7,
       onCreate: (db, version) async {
         await db.execute('''
           CREATE TABLE bills (
             id TEXT PRIMARY KEY,
+            wallet_id TEXT NOT NULL DEFAULT 'wallet_default',
             type TEXT NOT NULL,
             amount REAL NOT NULL,
             category TEXT NOT NULL,
@@ -41,7 +66,10 @@ class DatabaseHelper {
         ''');
         await _createBudgetsTable(db);
         await _createSettingsTable(db);
+        await _createWalletsTable(db);
+        await _createAssetsTable(db);
         await _createCategoriesTable(db);
+        await _seedDefaultWallet(db);
         await _seedDefaultCategories(db);
       },
       onUpgrade: (db, oldVersion, newVersion) async {
@@ -62,14 +90,71 @@ class DatabaseHelper {
           await _createCategoriesTable(db);
           await _seedDefaultCategories(db);
         }
+        if (oldVersion < 7) {
+          await _createWalletsTable(db);
+          await _createAssetsTable(db);
+          await db.execute(
+            "ALTER TABLE bills ADD COLUMN wallet_id TEXT NOT NULL DEFAULT 'wallet_default'",
+          );
+          if (oldVersion >= 4) {
+            await db.execute(
+              "ALTER TABLE budgets ADD COLUMN wallet_id TEXT NOT NULL DEFAULT 'wallet_default'",
+            );
+          }
+          await db.execute(
+            "UPDATE bills SET wallet_id = 'wallet_default' WHERE wallet_id IS NULL OR wallet_id = ''",
+          );
+          if (oldVersion >= 4) {
+            await db.execute(
+              "UPDATE budgets SET wallet_id = 'wallet_default' WHERE wallet_id IS NULL OR wallet_id = ''",
+            );
+          }
+          await db.execute('DROP INDEX IF EXISTS idx_budgets_unique');
+          await db.execute('''
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_budgets_unique
+            ON budgets(wallet_id, period_type, period, is_total, icon_id)
+          ''');
+          await _ensureDefaultWallet(db);
+        }
       },
     );
+  }
+
+  Future<void> _createWalletsTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS wallets (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )
+    ''');
+  }
+
+  Future<void> _createAssetsTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS asset_records (
+        id TEXT PRIMARY KEY,
+        wallet_id TEXT NOT NULL DEFAULT 'wallet_default',
+        type TEXT NOT NULL,
+        name TEXT NOT NULL,
+        note TEXT NOT NULL DEFAULT '',
+        amount REAL NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )
+    ''');
+    await db.execute('''
+      CREATE INDEX IF NOT EXISTS idx_asset_records_wallet
+      ON asset_records(wallet_id, type)
+    ''');
   }
 
   Future<void> _createBudgetsTable(Database db) async {
     await db.execute('''
       CREATE TABLE IF NOT EXISTS budgets (
         id TEXT PRIMARY KEY,
+        wallet_id TEXT NOT NULL DEFAULT 'wallet_default',
         period_type TEXT NOT NULL,
         period TEXT NOT NULL,
         is_total INTEGER NOT NULL,
@@ -82,7 +167,7 @@ class DatabaseHelper {
     ''');
     await db.execute('''
       CREATE UNIQUE INDEX IF NOT EXISTS idx_budgets_unique
-      ON budgets(period_type, period, is_total, icon_id)
+      ON budgets(wallet_id, period_type, period, is_total, icon_id)
     ''');
   }
 
@@ -93,6 +178,21 @@ class DatabaseHelper {
         value TEXT NOT NULL
       )
     ''');
+  }
+
+  Future<void> _seedDefaultWallet(Database db) async {
+    final now = DateTime.now().toIso8601String();
+    await db.insert(
+      'wallets',
+      {
+        'id': _defaultWalletId,
+        'name': _defaultWalletName,
+        'created_at': now,
+        'updated_at': now,
+      },
+      conflictAlgorithm: ConflictAlgorithm.ignore,
+    );
+    await setSetting(_currentWalletSettingKey, _defaultWalletId, db: db);
   }
 
   Future<void> _createCategoriesTable(Database db) async {
@@ -116,6 +216,18 @@ class DatabaseHelper {
       CREATE UNIQUE INDEX IF NOT EXISTS idx_categories_inex_name
       ON categories(in_ex, name)
     ''');
+  }
+
+  Future<void> _ensureDefaultWallet(Database db) async {
+    final wallets = await db.query(
+      'wallets',
+      where: 'id = ?',
+      whereArgs: [_defaultWalletId],
+      limit: 1,
+    );
+    if (wallets.isEmpty) {
+      await _seedDefaultWallet(db);
+    }
   }
 
   /// 把 [categoryJson] 中的默认类别写入 categories 表，作为初始数据。
@@ -152,43 +264,56 @@ class DatabaseHelper {
   }
 
   /// 查询所有账单，按日期倒序
-  Future<List<BillItem>> getAllBills() async {
+  Future<List<BillItem>> getAllBills({String? walletId}) async {
     final db = await database;
     final rows = await db.query(
       'bills',
+      where: walletId == null ? null : 'wallet_id = ?',
+      whereArgs: walletId == null ? null : [walletId],
       orderBy: "substr(date, 1, 10) DESC, sort_at DESC, date DESC",
     );
     return rows.map((r) => BillItem.fromMap(r)).toList();
   }
 
   /// 按日期范围查询账单 (start/end 格式: "2026-03-01")
-  Future<List<BillItem>> getBillsByDateRange(String start, String end) async {
+  Future<List<BillItem>> getBillsByDateRange(
+    String start,
+    String end, {
+    String? walletId,
+  }) async {
     final db = await database;
     final rows = await db.query(
       'bills',
-      where: "substr(date, 1, 10) >= ? AND substr(date, 1, 10) <= ?",
-      whereArgs: [start, end],
+      where: _walletClause(
+        "substr(date, 1, 10) >= ? AND substr(date, 1, 10) <= ?",
+        walletId,
+      ),
+      whereArgs: walletId == null ? [start, end] : [start, end, walletId],
       orderBy: "substr(date, 1, 10) DESC, sort_at DESC, date DESC",
     );
     return rows.map((r) => BillItem.fromMap(r)).toList();
   }
 
   /// 按月查询账单 (yearMonth 格式: "2026-03")
-  Future<List<BillItem>> getBillsByMonth(String yearMonth) async {
+  Future<List<BillItem>> getBillsByMonth(String yearMonth, {String? walletId}) async {
     final db = await database;
     final rows = await db.query(
       'bills',
-      where: "date LIKE ?",
-      whereArgs: ['$yearMonth%'],
+      where: _walletClause("date LIKE ?", walletId),
+      whereArgs: walletId == null ? ['$yearMonth%'] : ['$yearMonth%', walletId],
       orderBy: "substr(date, 1, 10) DESC, sort_at DESC, date DESC",
     );
     return rows.map((r) => BillItem.fromMap(r)).toList();
   }
 
   /// 根据 id 查询单条账单
-  Future<BillItem?> getBillById(String id) async {
+  Future<BillItem?> getBillById(String id, {String? walletId}) async {
     final db = await database;
-    final rows = await db.query('bills', where: 'id = ?', whereArgs: [id]);
+    final rows = await db.query(
+      'bills',
+      where: _walletClause('id = ?', walletId),
+      whereArgs: walletId == null ? [id] : [id, walletId],
+    );
     if (rows.isEmpty) return null;
     return BillItem.fromMap(rows.first);
   }
@@ -207,53 +332,61 @@ class DatabaseHelper {
   }
 
   /// 查询某月收入总额
-  Future<double> getMonthlyIncome(String yearMonth) async {
+  Future<double> getMonthlyIncome(String yearMonth, {String? walletId}) async {
     final db = await database;
     final result = await db.rawQuery(
-      "SELECT COALESCE(SUM(amount), 0) as total FROM bills WHERE type = 'income' AND date LIKE ?",
-      ['$yearMonth%'],
+      walletId == null
+          ? "SELECT COALESCE(SUM(amount), 0) as total FROM bills WHERE type = 'income' AND date LIKE ?"
+          : "SELECT COALESCE(SUM(amount), 0) as total FROM bills WHERE type = 'income' AND date LIKE ? AND wallet_id = ?",
+      walletId == null ? ['$yearMonth%'] : ['$yearMonth%', walletId],
     );
     return (result.first['total'] as num).toDouble();
   }
 
   /// 查询某月支出总额
-  Future<double> getMonthlyExpense(String yearMonth) async {
+  Future<double> getMonthlyExpense(String yearMonth, {String? walletId}) async {
     final db = await database;
     final result = await db.rawQuery(
-      "SELECT COALESCE(SUM(amount), 0) as total FROM bills WHERE type = 'expense' AND date LIKE ?",
-      ['$yearMonth%'],
+      walletId == null
+          ? "SELECT COALESCE(SUM(amount), 0) as total FROM bills WHERE type = 'expense' AND date LIKE ?"
+          : "SELECT COALESCE(SUM(amount), 0) as total FROM bills WHERE type = 'expense' AND date LIKE ? AND wallet_id = ?",
+      walletId == null ? ['$yearMonth%'] : ['$yearMonth%', walletId],
     );
     return (result.first['total'] as num).toDouble();
   }
 
   /// 按年查询账单 (year 格式: "2026")
-  Future<List<BillItem>> getBillsByYear(String year) async {
+  Future<List<BillItem>> getBillsByYear(String year, {String? walletId}) async {
     final db = await database;
     final rows = await db.query(
       'bills',
-      where: "date LIKE ?",
-      whereArgs: ['$year%'],
+      where: _walletClause("date LIKE ?", walletId),
+      whereArgs: walletId == null ? ['$year%'] : ['$year%', walletId],
       orderBy: "substr(date, 1, 10) DESC, sort_at DESC, date DESC",
     );
     return rows.map((r) => BillItem.fromMap(r)).toList();
   }
 
   /// 查询某年收入总额
-  Future<double> getYearlyIncome(String year) async {
+  Future<double> getYearlyIncome(String year, {String? walletId}) async {
     final db = await database;
     final result = await db.rawQuery(
-      "SELECT COALESCE(SUM(amount), 0) as total FROM bills WHERE type = 'income' AND date LIKE ?",
-      ['$year%'],
+      walletId == null
+          ? "SELECT COALESCE(SUM(amount), 0) as total FROM bills WHERE type = 'income' AND date LIKE ?"
+          : "SELECT COALESCE(SUM(amount), 0) as total FROM bills WHERE type = 'income' AND date LIKE ? AND wallet_id = ?",
+      walletId == null ? ['$year%'] : ['$year%', walletId],
     );
     return (result.first['total'] as num).toDouble();
   }
 
   /// 查询某年支出总额
-  Future<double> getYearlyExpense(String year) async {
+  Future<double> getYearlyExpense(String year, {String? walletId}) async {
     final db = await database;
     final result = await db.rawQuery(
-      "SELECT COALESCE(SUM(amount), 0) as total FROM bills WHERE type = 'expense' AND date LIKE ?",
-      ['$year%'],
+      walletId == null
+          ? "SELECT COALESCE(SUM(amount), 0) as total FROM bills WHERE type = 'expense' AND date LIKE ?"
+          : "SELECT COALESCE(SUM(amount), 0) as total FROM bills WHERE type = 'expense' AND date LIKE ? AND wallet_id = ?",
+      walletId == null ? ['$year%'] : ['$year%', walletId],
     );
     return (result.first['total'] as num).toDouble();
   }
@@ -262,12 +395,18 @@ class DatabaseHelper {
   ///
   /// [datePrefix] 为日期前缀，月份传 'YYYY-MM'，年度传 'YYYY'
   /// 返回 `Map<icon_id, 支出总额>`
-  Future<Map<int, double>> getExpenseGroupByIconId(String datePrefix) async {
+  Future<Map<int, double>> getExpenseGroupByIconId(
+    String datePrefix, {
+    String? walletId,
+  }) async {
     final db = await database;
     final rows = await db.rawQuery(
-      "SELECT icon_id, COALESCE(SUM(amount), 0) as total FROM bills "
-      "WHERE type = 'expense' AND date LIKE ? GROUP BY icon_id",
-      ['$datePrefix%'],
+      walletId == null
+          ? "SELECT icon_id, COALESCE(SUM(amount), 0) as total FROM bills "
+              "WHERE type = 'expense' AND date LIKE ? GROUP BY icon_id"
+          : "SELECT icon_id, COALESCE(SUM(amount), 0) as total FROM bills "
+              "WHERE type = 'expense' AND date LIKE ? AND wallet_id = ? GROUP BY icon_id",
+      walletId == null ? ['$datePrefix%'] : ['$datePrefix%', walletId],
     );
     final result = <int, double>{};
     for (final row in rows) {
@@ -290,12 +429,13 @@ class DatabaseHelper {
   Future<List<BudgetItem>> getBudgets({
     required String periodType,
     required String period,
+    String? walletId,
   }) async {
     final db = await database;
     final rows = await db.query(
       'budgets',
-      where: 'period_type = ? AND period = ?',
-      whereArgs: [periodType, period],
+      where: _walletClause('period_type = ? AND period = ?', walletId),
+      whereArgs: walletId == null ? [periodType, period] : [periodType, period, walletId],
     );
     return rows.map((r) => BudgetItem.fromMap(r)).toList();
   }
@@ -307,9 +447,9 @@ class DatabaseHelper {
   }
 
   /// 读取一条本地设置；不存在返回 null
-  Future<String?> getSetting(String key) async {
-    final db = await database;
-    final rows = await db.query(
+  Future<String?> getSetting(String key, {Database? db}) async {
+    final databaseRef = db ?? await database;
+    final rows = await databaseRef.query(
       'settings',
       where: 'key = ?',
       whereArgs: [key],
@@ -320,30 +460,103 @@ class DatabaseHelper {
   }
 
   /// 写入一条本地设置（已存在则覆盖）
-  Future<void> setSetting(String key, String value) async {
-    final db = await database;
-    await db.insert(
+  Future<void> setSetting(String key, String value, {Database? db}) async {
+    final databaseRef = db ?? await database;
+    await databaseRef.insert(
       'settings',
       {'key': key, 'value': value},
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
   }
 
+  Future<List<WalletItem>> getWallets() async {
+    final db = await database;
+    final rows = await db.query('wallets', orderBy: 'created_at ASC');
+    return rows.map(WalletItem.fromMap).toList();
+  }
+
+  Future<String> getCurrentWalletId() async {
+    final db = await database;
+    final id = await getSetting(_currentWalletSettingKey, db: db);
+    if (id != null && id.isNotEmpty) {
+      final wallets = await db.query(
+        'wallets',
+        where: 'id = ?',
+        whereArgs: [id],
+        limit: 1,
+      );
+      if (wallets.isNotEmpty) return id;
+    }
+    await _ensureDefaultWallet(db);
+    return _defaultWalletId;
+  }
+
+  Future<void> setCurrentWalletId(String walletId) async {
+    final db = await database;
+    await setSetting(_currentWalletSettingKey, walletId, db: db);
+  }
+
+  Future<WalletItem> createWallet(String name) async {
+    final db = await database;
+    final now = DateTime.now().toIso8601String();
+    final id = 'wallet_${DateTime.now().millisecondsSinceEpoch}';
+    final wallet = WalletItem(
+      id: id,
+      name: name,
+      createdAt: now,
+      updatedAt: now,
+    );
+    await db.insert('wallets', wallet.toMap());
+    return wallet;
+  }
+
+  Future<List<AssetItem>> getAssets({String? walletId}) async {
+    final db = await database;
+    final args = <Object?>[];
+    var where = '1 = 1';
+    if (walletId != null) {
+      where += ' AND wallet_id = ?';
+      args.add(walletId);
+    }
+    final rows = await db.query(
+      'asset_records',
+      where: where,
+      whereArgs: args,
+      orderBy: 'created_at DESC',
+    );
+    return rows.map(AssetItem.fromMap).toList();
+  }
+
+  Future<void> insertAsset(AssetItem asset) async {
+    final db = await database;
+    await db.insert('asset_records', asset.toMap());
+  }
+
+  Future<int> deleteAsset(String id) async {
+    final db = await database;
+    return db.delete('asset_records', where: 'id = ?', whereArgs: [id]);
+  }
+
   /// 账单总条数
-  Future<int> getTotalBillCount() async {
+  Future<int> getTotalBillCount({String? walletId}) async {
     final db = await database;
     final result = await db.rawQuery(
-      'SELECT COUNT(*) as cnt FROM bills',
+      walletId == null
+          ? 'SELECT COUNT(*) as cnt FROM bills'
+          : 'SELECT COUNT(*) as cnt FROM bills WHERE wallet_id = ?',
+      walletId == null ? [] : [walletId],
     );
     return (result.first['cnt'] as int?) ?? 0;
   }
 
   /// 所有账单 distinct 的 yyyy-MM-dd 日期，按升序
-  Future<List<String>> getDistinctBillDates() async {
+  Future<List<String>> getDistinctBillDates({String? walletId}) async {
     final db = await database;
     final rows = await db.rawQuery(
-      "SELECT DISTINCT substr(date, 1, 10) AS d FROM bills "
-      "ORDER BY d ASC",
+      walletId == null
+          ? "SELECT DISTINCT substr(date, 1, 10) AS d FROM bills ORDER BY d ASC"
+          : "SELECT DISTINCT substr(date, 1, 10) AS d FROM bills WHERE wallet_id = ? ORDER BY d ASC",
+      walletId == null ? [] : [walletId],
     );
     return [
       for (final row in rows)
@@ -353,10 +566,13 @@ class DatabaseHelper {
 
   /// 各 icon_id 对应的账单笔数（不区分收支），用于徽章成就判定。
   /// 返回 `Map<icon_id, 笔数>`
-  Future<Map<int, int>> getBillCountGroupByIconId() async {
+  Future<Map<int, int>> getBillCountGroupByIconId({String? walletId}) async {
     final db = await database;
     final rows = await db.rawQuery(
-      'SELECT icon_id, COUNT(*) AS cnt FROM bills GROUP BY icon_id',
+      walletId == null
+          ? 'SELECT icon_id, COUNT(*) AS cnt FROM bills GROUP BY icon_id'
+          : 'SELECT icon_id, COUNT(*) AS cnt FROM bills WHERE wallet_id = ? GROUP BY icon_id',
+      walletId == null ? [] : [walletId],
     );
     final result = <int, int>{};
     for (final row in rows) {

@@ -9,6 +9,7 @@ import '../data/account_data.dart';
 import '../utils/icon_helper.dart';
 import '../widgets/month_picker.dart';
 import '../providers/navigation_provider.dart';
+import 'asset_manager_page.dart';
 import 'bill_statement_page.dart';
 import 'bookkeeping_calendar_page.dart';
 import 'budget_manager_page.dart';
@@ -267,6 +268,11 @@ class _HomePageState extends ConsumerState<HomePage> {
               label: '预算',
               onTap: () => _openBudgetManager(context, ref),
             ),
+            _quickActionItem(
+              iconData: Icons.account_balance_wallet_outlined,
+              label: '资产管家',
+              onTap: () => _openAssetManager(context),
+            ),
           ],
         ),
       ),
@@ -274,7 +280,8 @@ class _HomePageState extends ConsumerState<HomePage> {
   }
 
   Widget _quickActionItem({
-    required String iconPath,
+    String? iconPath,
+    IconData? iconData,
     required String label,
     required VoidCallback onTap,
   }) {
@@ -282,15 +289,18 @@ class _HomePageState extends ConsumerState<HomePage> {
       behavior: HitTestBehavior.opaque,
       onTap: onTap,
       child: SizedBox(
-        width: 56,
+        width: 72,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Image.asset(iconPath, width: 24, height: 24),
+            iconPath != null
+                ? Image.asset(iconPath, width: 24, height: 24)
+                : Icon(iconData!, size: 24, color: AppColors.textPrimary),
             const SizedBox(height: 4),
             Text(
               label,
-              style: TextStyle(fontSize: 10, color: AppColors.textPrimary),
+              style: TextStyle(fontSize: 9, color: AppColors.textPrimary),
+              maxLines: 1,
             ),
           ],
         ),
@@ -310,6 +320,12 @@ class _HomePageState extends ConsumerState<HomePage> {
     Navigator.of(
       context,
     ).push(MaterialPageRoute<void>(builder: (_) => const BudgetManagerPage()));
+  }
+
+  void _openAssetManager(BuildContext context) {
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute<void>(builder: (_) => const AssetManagerPage()));
   }
 
   void _openSearchPage(BuildContext context) {
