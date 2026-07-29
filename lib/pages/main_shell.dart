@@ -7,8 +7,6 @@ import '../providers/badge_seen_provider.dart';
 import '../providers/bill_provider.dart';
 import '../providers/keyboard_provider.dart';
 import '../providers/navigation_provider.dart';
-import '../providers/settings_provider.dart';
-import '../services/sms_auto_bookkeeping_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/badge_unlock_dialog.dart';
 import '../widgets/bottom_nav_bar.dart';
@@ -28,7 +26,6 @@ class MainShell extends ConsumerStatefulWidget {
 
 class _MainShellState extends ConsumerState<MainShell>
     with WidgetsBindingObserver {
-  static const String _logTag = '[LedgerSms][MainShell]';
   DateTime? _lastBackPress;
   static const _pages = <Widget>[
     HomePage(),
@@ -50,7 +47,6 @@ class _MainShellState extends ConsumerState<MainShell>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    Future<void>.microtask(_initializeSmsAutoBookkeepingIfEnabled);
   }
 
   @override
@@ -61,37 +57,7 @@ class _MainShellState extends ConsumerState<MainShell>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) {
-      _syncPendingSmsTransactionsIfEnabled();
-    }
-  }
-
-  /// 读取「我的」页中的短信自动记账开关；未加载完成时按默认值（true）走，
-  /// 与历史行为保持兼容。
-  Future<bool> _isSmsAutoEnabled() async {
-    return ref.read(smsAutoBookkeepingEnabledProvider.future);
-  }
-
-  Future<void> _initializeSmsAutoBookkeepingIfEnabled() async {
-    if (!await _isSmsAutoEnabled()) {
-      debugPrint('$_logTag sms auto bookkeeping disabled, skip init');
-      return;
-    }
-    await _initializeSmsAutoBookkeeping();
-  }
-
-  Future<void> _syncPendingSmsTransactionsIfEnabled() async {
-    if (!await _isSmsAutoEnabled()) {
-      debugPrint('$_logTag sms auto bookkeeping disabled, skip resume sync');
-      return;
-    }
-    await _syncPendingSmsTransactions();
-  }
-
-  Future<void> _initializeSmsAutoBookkeeping() async {
-    final granted = await SmsAutoBookkeepingService.ensurePermissions();
-    debugPrint('$_logTag sms permissions granted=$granted');
-    await _syncPendingSmsTransactions();
+    return;
   }
 
   /// 与 [badgeSeenProvider] 比对，把新解锁的徽章弹窗依次展示出来。
@@ -151,53 +117,10 @@ class _MainShellState extends ConsumerState<MainShell>
     await showBadgeUnlockDialog(context, newlyBadges);
   }
 
-  Future<void> _syncPendingSmsTransactions() async {
-    final currentMonth = ref.read(selectedMonthProvider);
-    debugPrint('$_logTag sync pending sms start, currentMonth=$currentMonth');
-    final result = await SmsAutoBookkeepingService.syncPendingTransactions();
-    debugPrint(
-      '$_logTag sync pending sms insertedCount=${result.insertedCount}, months=${result.insertedMonths}',
-    );
-    if (!mounted || result.insertedCount <= 0) {
-      return;
-    }
-    if (result.insertedMonths.isNotEmpty &&
-        !result.insertedMonths.contains(currentMonth)) {
-      final latestMonth = result.insertedMonths.last;
-      debugPrint(
-        '$_logTag switch selectedMonth from $currentMonth to $latestMonth for sms record visibility',
-      );
-      ref.read(selectedMonthProvider.notifier).setMonth(latestMonth);
-    }
-    ref.invalidate(billListProvider);
-    ref.invalidate(monthlySummaryProvider);
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('已自动记账 ${result.insertedCount} 笔记录'),
-          duration: const Duration(seconds: 3),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final currentIndex = ref.watch(navigationProvider);
     final kb = ref.watch(keyboardProvider);
-
-    // 在「我的」页里切换短信自动记账开关时：
-    // - 关 → 开：立即触发权限申请 + 一次同步，无需重启 App
-    // - 开 → 关：不做任何事，仅停止后续同步触发
-    ref.listen<AsyncValue<bool>>(smsAutoBookkeepingEnabledProvider, (prev, next) {
-      final wasOn = prev?.value ?? false;
-      final isOn = next.value ?? false;
-      if (!wasOn && isOn) {
-        debugPrint('$_logTag sms auto bookkeeping toggled ON, kick off init');
-        _initializeSmsAutoBookkeeping();
-      }
-    });
 
     // 监听徽章数据变化：每次账单变更后 [badgeProvider] 都会被重建，这里
     // 在新数据到达时检测「这次又获得了哪些过去没看过的徽章」并依次弹窗提示。

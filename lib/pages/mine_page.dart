@@ -7,7 +7,6 @@ import 'package:file_picker/file_picker.dart';
 import '../data/account_data.dart';
 import '../providers/bill_provider.dart';
 import '../providers/category_provider.dart';
-import '../providers/settings_provider.dart';
 import '../providers/user_stats_provider.dart';
 import '../services/import_service.dart';
 import '../theme/app_theme.dart';
@@ -17,7 +16,7 @@ import 'badge_page.dart';
 /// 「我的」页面
 ///
 /// 顶部欢迎区（黄色）+ 半浮于其上的统计卡片，
-/// 下方是设置区与小贴士区。设置区目前提供「短信自动记账」开关。
+/// 下方是设置区与小贴士区。
 class MinePage extends ConsumerWidget {
   const MinePage({super.key});
 
@@ -31,8 +30,6 @@ class MinePage extends ConsumerWidget {
           _MineHeader(),
           SizedBox(height: 36 + 12),
           _AchievementCard(),
-          SizedBox(height: 12),
-          _SmsSettingCard(),
           SizedBox(height: 12),
           _ImportCard(),
           SizedBox(height: 12),
@@ -271,15 +268,16 @@ class _AchievementCard extends StatelessWidget {
   }
 }
 
+/*
 // ==========================================================================
-// 短信自动记账开关卡片
+// 旧设置卡片
 // ==========================================================================
 class _SmsSettingCard extends ConsumerWidget {
   const _SmsSettingCard();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final enabledAsync = ref.watch(smsAutoBookkeepingEnabledProvider);
+    final enabledAsync = ref.watch(settingProvider);
     final enabled = enabledAsync.value ?? true;
     final loading = enabledAsync.isLoading;
 
@@ -288,8 +286,8 @@ class _SmsSettingCard extends ConsumerWidget {
       children: [
         _SettingTile(
           icon: Icons.sms_outlined,
-          title: '短信自动记账',
-          subtitle: '自动识别银行/支付短信生成账单（仅 Android）',
+          title: '旧设置',
+          subtitle: '旧的自动识别逻辑，已停用',
           trailing: Switch.adaptive(
             value: enabled,
             activeThumbColor: AppColors.primaryDark,
@@ -297,7 +295,7 @@ class _SmsSettingCard extends ConsumerWidget {
                 ? null
                 : (v) {
                     ref
-                        .read(smsAutoBookkeepingEnabledProvider.notifier)
+                        .read(settingProvider.notifier)
                         .setEnabled(v);
                     ScaffoldMessenger.of(context).clearSnackBars();
                     ScaffoldMessenger.of(context).showSnackBar(
@@ -305,7 +303,7 @@ class _SmsSettingCard extends ConsumerWidget {
                         duration: const Duration(milliseconds: 1500),
                         behavior: SnackBarBehavior.floating,
                         backgroundColor: AppColors.textPrimary,
-                        content: Text(v ? '已开启短信自动记账' : '已关闭短信自动记账'),
+                        content: Text(v ? '已开启旧设置' : '已关闭旧设置'),
                       ),
                     );
                   },
@@ -319,6 +317,8 @@ class _SmsSettingCard extends ConsumerWidget {
 // ==========================================================================
 // 小贴士卡片
 // ==========================================================================
+*/
+
 class _TipsCard extends StatelessWidget {
   const _TipsCard();
 
