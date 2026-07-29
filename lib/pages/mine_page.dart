@@ -386,7 +386,7 @@ class _AppFooter extends StatelessWidget {
       child: Column(
         children: [
           const Text(
-            '罐头记账',
+            '我想省',
             style: TextStyle(
               fontSize: 13,
               fontWeight: FontWeight.w600,

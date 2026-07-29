@@ -66,7 +66,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                   alignment: Alignment.center,
                   children: [
                     const Text(
-                      '罐头记账',
+                      '我想省',
                       style: TextStyle(
                         fontSize: 20,
                         fontWeight: FontWeight.bold,

@@ -26,7 +26,7 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: '罐头记账',
+      title: '我想省',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light,
       home: const MainShell(),
