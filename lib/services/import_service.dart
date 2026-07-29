@@ -142,11 +142,12 @@ class _ImportedBudget {
   }
 
   BudgetItem toModel(String fallbackWalletId, {String? idOverride}) {
+    final resolvedWalletId = walletId.isEmpty ? fallbackWalletId : walletId;
     return BudgetItem(
       id: (idOverride ?? id).isEmpty
-          ? 'import_budget_${walletId.isEmpty ? fallbackWalletId : walletId}_${periodType}_$period_${category}_${amount}'
+          ? 'import_budget_${resolvedWalletId}_${periodType}_${period}_${category}_${amount}'
           : (idOverride ?? id),
-      walletId: walletId.isEmpty ? fallbackWalletId : walletId,
+      walletId: resolvedWalletId,
       periodType: periodType,
       period: period,
       isTotal: isTotal,
@@ -194,11 +195,12 @@ class _ImportedAsset {
   }
 
   AssetItem toModel(String fallbackWalletId, {String? idOverride}) {
+    final resolvedWalletId = walletId.isEmpty ? fallbackWalletId : walletId;
     return AssetItem(
       id: (idOverride ?? id).isEmpty
-          ? 'import_asset_${walletId.isEmpty ? fallbackWalletId : walletId}_${type}_$name_${amount}'
+          ? 'import_asset_${resolvedWalletId}_${type}_${name}_${amount}'
           : (idOverride ?? id),
-      walletId: walletId.isEmpty ? fallbackWalletId : walletId,
+      walletId: resolvedWalletId,
       type: type,
       name: name,
       note: note,
@@ -409,9 +411,10 @@ class ImportService {
     }
 
     for (final budget in data.budgets) {
+      final resolvedWalletId = budget.walletId.isEmpty ? fallbackWalletId : budget.walletId;
       final id = budget.id.isNotEmpty
           ? budget.id
-          : 'import_budget_${budget.walletId.isEmpty ? fallbackWalletId : budget.walletId}_${budget.periodType}_${budget.period}_${budget.category}_${budget.amount}_${importedBudgets + 1}';
+          : 'import_budget_${resolvedWalletId}_${budget.periodType}_${budget.period}_${budget.category}_${budget.amount}_${importedBudgets + 1}';
       if (existingBudgetIds.contains(id)) continue;
       await _db.insertOrReplaceBudget(budget.toModel(fallbackWalletId, idOverride: id));
       importedBudgets++;
@@ -419,9 +422,10 @@ class ImportService {
     }
 
     for (final asset in data.assets) {
+      final resolvedWalletId = asset.walletId.isEmpty ? fallbackWalletId : asset.walletId;
       final id = asset.id.isNotEmpty
           ? asset.id
-          : 'import_asset_${asset.walletId.isEmpty ? fallbackWalletId : asset.walletId}_${asset.type}_${asset.name}_${asset.amount}_${importedAssets + 1}';
+          : 'import_asset_${resolvedWalletId}_${asset.type}_${asset.name}_${asset.amount}_${importedAssets + 1}';
       if (existingAssetIds.contains(id)) continue;
       await _db.insertAsset(asset.toModel(fallbackWalletId, idOverride: id));
       importedAssets++;
