@@ -636,20 +636,19 @@ class _ImportCard extends ConsumerWidget {
 
   Future<void> _exportData(BuildContext context) async {
     try {
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (_) => const Center(child: CircularProgressIndicator()),
-      );
-      await ExportService().shareExport();
+      final savedPath = await ExportService().saveExportFile();
       if (!context.mounted) return;
-      Navigator.of(context).pop();
+      if (savedPath == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('已取消导出')),
+        );
+        return;
+      }
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('已生成备份')),
+        SnackBar(content: Text('已保存备份: $savedPath')),
       );
     } catch (e) {
       if (!context.mounted) return;
-      Navigator.of(context).maybePop();
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('导出失败: $e'), backgroundColor: Colors.red),
       );
@@ -819,7 +818,7 @@ class _ImportCard extends ConsumerWidget {
             color: AppColors.primaryDark,
           ),
           title: '数据导出',
-          subtitle: '导出全部钱包的 JSON 备份',
+          subtitle: '保存全部钱包的 JSON 备份',
           onTap: () => _exportData(context),
         ),
         const SizedBox(height: 8),

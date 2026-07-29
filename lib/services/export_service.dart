@@ -1,8 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:path/path.dart' as p;
-import 'package:share_plus/share_plus.dart';
+import 'package:file_picker/file_picker.dart';
 
 import '../db/database_helper.dart';
 
@@ -55,17 +54,30 @@ class ExportService {
     return const JsonEncoder.withIndent('  ').convert(data);
   }
 
-  Future<File> exportToTempFile() async {
-    final jsonString = await buildExportJson();
-    final tempDir = await Directory.systemTemp.createTemp('ledger_export_');
-    final fileName = 'ledger_backup_${DateTime.now().millisecondsSinceEpoch}.json';
-    final file = File(p.join(tempDir.path, fileName));
-    await file.writeAsString(jsonString, encoding: utf8);
-    return file;
+  Future<String?> _suggestInitialDirectory() async {
+    if (Platform.isAndroid) {
+      final downloadsDir = Directory('/storage/emulated/0/Download');
+      if (await downloadsDir.exists()) {
+        return downloadsDir.path;
+      }
+    }
+    return null;
   }
 
-  Future<void> shareExport() async {
-    final file = await exportToTempFile();
-    await Share.shareXFiles([XFile(file.path)], text: '我想省 数据备份');
+  Future<String?> saveExportFile() async {
+    final jsonString = await buildExportJson();
+    final timestamp = DateTime.now().millisecondsSinceEpoch;
+    final fileName = '我想省备份_$timestamp.json';
+    final path = await FilePicker.platform.saveFile(
+      dialogTitle: '保存 JSON 备份',
+      fileName: fileName,
+      initialDirectory: await _suggestInitialDirectory(),
+    );
+    if (path == null || path.isEmpty) return null;
+
+    final file = File(path);
+    await file.create(recursive: true);
+    await file.writeAsString(jsonString, encoding: utf8);
+    return file.path;
   }
 }
