@@ -35,5 +35,4 @@ todo：
 - 本地开发直接使用 `flutter run`，不需要走打包流程。
 - 数据通过 `sqflite` 保存在 Android 应用内部存储目录，属于手机本地数据。
 - Android 已关闭自动备份，避免把账本数据同步到系统备份。
-- GitHub 只负责打包 APK：手动触发 `build-apk` 工作流，或推送 `v*` 标签后自动生成拆分 APK。
-- 下载慢时优先选 `arm64-v8a` 版本，体积更小。
+- GitHub 只负责打包 APK：手动触发 `build-apk` 工作流，或推送 `v*` 标签后自动生成通用 APK。
