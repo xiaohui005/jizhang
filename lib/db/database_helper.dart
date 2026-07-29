@@ -475,6 +475,24 @@ class DatabaseHelper {
     return rows.map(WalletItem.fromMap).toList();
   }
 
+  Future<void> insertWallet(WalletItem wallet) async {
+    final db = await database;
+    await db.insert(
+      'wallets',
+      wallet.toMap(),
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  Future<List<BudgetItem>> getAllBudgets() async {
+    final db = await database;
+    final rows = await db.query(
+      'budgets',
+      orderBy: 'period_type ASC, period ASC, is_total DESC, icon_id ASC',
+    );
+    return rows.map(BudgetItem.fromMap).toList();
+  }
+
   Future<String> getCurrentWalletId() async {
     final db = await database;
     final id = await getSetting(_currentWalletSettingKey, db: db);
@@ -525,6 +543,10 @@ class DatabaseHelper {
       orderBy: 'created_at DESC',
     );
     return rows.map(AssetItem.fromMap).toList();
+  }
+
+  Future<List<AssetItem>> getAllAssets() async {
+    return getAssets();
   }
 
   Future<void> insertAsset(AssetItem asset) async {

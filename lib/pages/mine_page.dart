@@ -7,9 +7,13 @@ import 'package:file_picker/file_picker.dart';
 import '../data/account_data.dart';
 import '../models/bill_item.dart';
 import '../providers/bill_provider.dart';
+import '../providers/budget_provider.dart';
+import '../providers/asset_provider.dart';
+import '../providers/badge_provider.dart';
 import '../providers/category_provider.dart';
 import '../providers/user_stats_provider.dart';
 import '../providers/wallet_provider.dart';
+import '../services/export_service.dart';
 import '../services/import_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/icon_helper.dart';
@@ -630,6 +634,28 @@ class _SettingTile extends StatelessWidget {
 class _ImportCard extends ConsumerWidget {
   const _ImportCard();
 
+  Future<void> _exportData(BuildContext context) async {
+    try {
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => const Center(child: CircularProgressIndicator()),
+      );
+      await ExportService().shareExport();
+      if (!context.mounted) return;
+      Navigator.of(context).pop();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('已生成备份')),
+      );
+    } catch (e) {
+      if (!context.mounted) return;
+      Navigator.of(context).maybePop();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('导出失败: $e'), backgroundColor: Colors.red),
+      );
+    }
+  }
+
   Future<void> _pickAndImport(BuildContext context, WidgetRef ref) async {
     try {
       // 1. 选择文件
@@ -662,7 +688,10 @@ class _ImportCard extends ConsumerWidget {
               _previewRow('数据来源', preview.source),
               _previewRow('导出时间', preview.exportedAt),
               const Divider(height: 16),
+              _previewRow('钱包', '${preview.walletCount} 个'),
               _previewRow('账单记录', '${preview.recordCount} 条'),
+              _previewRow('预算', '${preview.budgetCount} 条'),
+              _previewRow('资产', '${preview.assetCount} 条'),
               _previewRow('支出分类', '${preview.expenseCategories} 个'),
               _previewRow('收入分类', '${preview.incomeCategories} 个'),
               const SizedBox(height: 12),
@@ -705,6 +734,14 @@ class _ImportCard extends ConsumerWidget {
       // 刷新所有数据 Provider，使首页/统计等页面即时显示新数据
       ref.invalidate(billListProvider);
       ref.invalidate(categoryListProvider);
+      ref.invalidate(budgetProvider);
+      ref.invalidate(monthlyTotalBudgetProvider);
+      ref.invalidate(assetProvider);
+      ref.invalidate(walletsProvider);
+      ref.invalidate(currentWalletProvider);
+      ref.invalidate(currentWalletIdProvider);
+      ref.invalidate(userStatsProvider);
+      ref.invalidate(badgeProvider);
 
       // 6. 显示导入结果
       showDialog(
@@ -716,7 +753,13 @@ class _ImportCard extends ConsumerWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               _previewRow('总记录数', '${importResult.totalRecords}'),
+              if (importResult.importedWallets > 0)
+                _previewRow('新增钱包', '${importResult.importedWallets} 个'),
               _previewRow('成功导入', '${importResult.insertedBills} 条'),
+              if (importResult.importedBudgets > 0)
+                _previewRow('新增预算', '${importResult.importedBudgets} 条'),
+              if (importResult.importedAssets > 0)
+                _previewRow('新增资产', '${importResult.importedAssets} 条'),
               if (importResult.skippedBills > 0)
                 _previewRow('跳过重复', '${importResult.skippedBills} 条'),
               if (importResult.importedCategories > 0)
@@ -771,12 +814,23 @@ class _ImportCard extends ConsumerWidget {
       children: [
         _NavTile(
           leading: const Icon(
+            Icons.file_upload_outlined,
+            size: 22,
+            color: AppColors.primaryDark,
+          ),
+          title: '数据导出',
+          subtitle: '导出全部钱包的 JSON 备份',
+          onTap: () => _exportData(context),
+        ),
+        const SizedBox(height: 8),
+        _NavTile(
+          leading: const Icon(
             Icons.file_download_outlined,
             size: 22,
             color: AppColors.primaryDark,
           ),
           title: '数据导入',
-          subtitle: '从 myapp 导出的 JSON 文件导入记账数据',
+          subtitle: '合并导入 JSON 备份数据',
           onTap: () => _pickAndImport(context, ref),
         ),
       ],
