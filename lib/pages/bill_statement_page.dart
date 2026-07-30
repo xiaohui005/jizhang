@@ -6,6 +6,7 @@ import '../models/bill_item.dart';
 import '../providers/bill_provider.dart';
 import '../theme/app_theme.dart';
 import '../utils/format.dart';
+import '../widgets/payment_method_widgets.dart';
 import '../widgets/date_picker.dart';
 
 class BillStatementPage extends ConsumerStatefulWidget {
@@ -19,6 +20,7 @@ class _BillStatementPageState extends ConsumerState<BillStatementPage> {
   final _db = DatabaseHelper.instance;
   late int _selectedYear;
   _StatementTab _tab = _StatementTab.month;
+  String _selectedPaymentMethod = '';
 
   @override
   void initState() {
@@ -28,7 +30,9 @@ class _BillStatementPageState extends ConsumerState<BillStatementPage> {
   }
 
   Future<_StatementData> _loadData() async {
-    final bills = await _db.getAllBills();
+    final bills = await _db.getAllBills(
+      paymentMethod: _selectedPaymentMethod.isEmpty ? null : _selectedPaymentMethod,
+    );
     final years = _extractYears(bills);
     if (!years.contains(_selectedYear)) {
       years.add(_selectedYear);
@@ -142,7 +146,8 @@ class _BillStatementPageState extends ConsumerState<BillStatementPage> {
         child: FutureBuilder<_StatementData>(
           future: _loadData(),
           builder: (context, snapshot) {
-            if (!snapshot.hasData) {
+            if (snapshot.connectionState != ConnectionState.done ||
+                !snapshot.hasData) {
               return const Center(child: CircularProgressIndicator());
             }
 
@@ -154,6 +159,7 @@ class _BillStatementPageState extends ConsumerState<BillStatementPage> {
             return Column(
               children: [
                 _buildTopBar(data.years),
+                _buildPaymentMethodFilter(),
                 Expanded(
                   child: SingleChildScrollView(
                     padding: EdgeInsets.only(
@@ -199,6 +205,47 @@ class _BillStatementPageState extends ConsumerState<BillStatementPage> {
             );
           },
         ),
+      ),
+    );
+  }
+
+  Widget _buildPaymentMethodFilter() {
+    final options = paymentMethodFilterValues();
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 6),
+      child: Row(
+        children: [
+          const Text(
+            '支付方式',
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: AppColors.textSecondary,
+            ),
+          ),
+          const SizedBox(width: 10),
+          DropdownButtonHideUnderline(
+            child: DropdownButton<String>(
+              value: _selectedPaymentMethod,
+              isDense: true,
+              onChanged: (value) {
+                if (value == null) return;
+                setState(() => _selectedPaymentMethod = value);
+              },
+              items: [
+                for (final method in options)
+                  DropdownMenuItem<String>(
+                    value: method,
+                    child: Text(
+                      method.isEmpty ? '全部' : paymentMethodLabel(method),
+                      style: const TextStyle(fontSize: 12),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

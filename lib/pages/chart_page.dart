@@ -9,6 +9,7 @@ import '../providers/chart_provider.dart';
 import '../providers/navigation_provider.dart';
 import '../theme/app_theme.dart';
 import '../utils/icon_helper.dart';
+import '../widgets/payment_method_widgets.dart';
 
 class ChartPage extends ConsumerStatefulWidget {
   const ChartPage({super.key});
@@ -19,6 +20,7 @@ class ChartPage extends ConsumerStatefulWidget {
 class _ChartPageState extends ConsumerState<ChartPage> {
   List<BillItem> _bills = [];
   Map<String, double> _prevPeriodByCategory = {};
+  String _selectedPaymentMethod = '';
   final Map<ChartPeriod, String?> _expandedCategoryByPeriod = {
     ChartPeriod.week: null,
     ChartPeriod.month: null,
@@ -41,6 +43,7 @@ class _ChartPageState extends ConsumerState<ChartPage> {
   ScrollController _monthScrollCtrl = ScrollController();
   ScrollController _yearScrollCtrl = ScrollController();
   bool _pickerScrolling = false;
+  int _loadRequestSeq = 0;
 
   @override
   void initState() {
@@ -57,6 +60,7 @@ class _ChartPageState extends ConsumerState<ChartPage> {
     ref.invalidate(selectedWeekProvider);
     ref.invalidate(selectedChartMonthProvider);
     ref.invalidate(selectedYearProvider);
+    _selectedPaymentMethod = '';
     _initScrollControllers();
     _loadData();
   }
@@ -110,10 +114,8 @@ class _ChartPageState extends ConsumerState<ChartPage> {
   }
 
   Future<void> _loadData() async {
-    final showBlockingLoading = _bills.isEmpty;
-    if (showBlockingLoading) {
-      setState(() => _loading = true);
-    }
+    final requestSeq = ++_loadRequestSeq;
+    if (mounted) setState(() => _loading = true);
     final period = ref.read(chartPeriodProvider);
     final type = ref.read(chartTypeProvider);
     final db = DatabaseHelper.instance;
@@ -126,7 +128,13 @@ class _ChartPageState extends ConsumerState<ChartPage> {
             '${w.startDate.year}-${w.startDate.month.toString().padLeft(2, '0')}-${w.startDate.day.toString().padLeft(2, '0')}';
         final end =
             '${w.endDate.year}-${w.endDate.month.toString().padLeft(2, '0')}-${w.endDate.day.toString().padLeft(2, '0')}';
-        bills = await db.getBillsByDateRange(start, end);
+        bills = await db.getBillsByDateRange(
+          start,
+          end,
+          paymentMethod: _selectedPaymentMethod.isEmpty
+              ? null
+              : _selectedPaymentMethod,
+        );
         // 上一周
         final prevStart = w.startDate.subtract(const Duration(days: 7));
         final prevEnd = w.endDate.subtract(const Duration(days: 7));
@@ -134,28 +142,54 @@ class _ChartPageState extends ConsumerState<ChartPage> {
             '${prevStart.year}-${prevStart.month.toString().padLeft(2, '0')}-${prevStart.day.toString().padLeft(2, '0')}';
         final pe =
             '${prevEnd.year}-${prevEnd.month.toString().padLeft(2, '0')}-${prevEnd.day.toString().padLeft(2, '0')}';
-        prevBills = await db.getBillsByDateRange(ps, pe);
+        prevBills = await db.getBillsByDateRange(
+          ps,
+          pe,
+          paymentMethod: _selectedPaymentMethod.isEmpty
+              ? null
+              : _selectedPaymentMethod,
+        );
       case ChartPeriod.month:
         final m = ref.read(selectedChartMonthProvider);
-        bills = await db.getBillsByMonth(m);
+        bills = await db.getBillsByMonth(
+          m,
+          paymentMethod: _selectedPaymentMethod.isEmpty
+              ? null
+              : _selectedPaymentMethod,
+        );
         // 上一月
         final parts = m.split('-');
         final dt = DateTime(int.parse(parts[0]), int.parse(parts[1]) - 1, 1);
         final prevM = '${dt.year}-${dt.month.toString().padLeft(2, '0')}';
-        prevBills = await db.getBillsByMonth(prevM);
+        prevBills = await db.getBillsByMonth(
+          prevM,
+          paymentMethod: _selectedPaymentMethod.isEmpty
+              ? null
+              : _selectedPaymentMethod,
+        );
       case ChartPeriod.year:
         final y = ref.read(selectedYearProvider);
-        bills = await db.getBillsByYear(y);
+        bills = await db.getBillsByYear(
+          y,
+          paymentMethod: _selectedPaymentMethod.isEmpty
+              ? null
+              : _selectedPaymentMethod,
+        );
         // 上一年
         final prevY = '${int.parse(y) - 1}';
-        prevBills = await db.getBillsByYear(prevY);
+        prevBills = await db.getBillsByYear(
+          prevY,
+          paymentMethod: _selectedPaymentMethod.isEmpty
+              ? null
+              : _selectedPaymentMethod,
+        );
     }
     // 按分类汇总上一周期数据
     final prevMap = <String, double>{};
     for (final b in prevBills.where((b) => b.type == type)) {
       prevMap[b.category] = (prevMap[b.category] ?? 0) + b.amount;
     }
-    if (mounted) {
+    if (mounted && requestSeq == _loadRequestSeq) {
       setState(() {
         _bills = bills;
         _prevPeriodByCategory = prevMap;
@@ -208,6 +242,7 @@ class _ChartPageState extends ConsumerState<ChartPage> {
           _buildHeader(type),
           _buildPeriodTabs(period),
           _buildPeriodSelector(period),
+          _buildPaymentMethodFilter(),
           Expanded(
             child: _loading
                 ? const Center(child: CircularProgressIndicator())
@@ -224,6 +259,53 @@ class _ChartPageState extends ConsumerState<ChartPage> {
                       ],
                     ),
                   ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPaymentMethodFilter() {
+    final options = paymentMethodFilterValues();
+
+    return Container(
+      color: AppColors.primary.withValues(alpha: 0.18),
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+      child: Row(
+        children: [
+          const Text(
+            '支付方式',
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: Colors.black87,
+            ),
+          ),
+          const SizedBox(width: 10),
+          DropdownButtonHideUnderline(
+            child: DropdownButton<String>(
+              value: _selectedPaymentMethod,
+              isDense: true,
+              onChanged: (value) {
+                if (value == null) return;
+                setState(() {
+                  _selectedPaymentMethod = value;
+                  _expandedCategoryByPeriod[ref.read(chartPeriodProvider)] = null;
+                  _loading = true;
+                });
+                _loadData();
+              },
+              items: [
+                for (final method in options)
+                  DropdownMenuItem<String>(
+                    value: method,
+                    child: Text(
+                      method.isEmpty ? '全部' : paymentMethodLabel(method),
+                      style: const TextStyle(fontSize: 12),
+                    ),
+                  ),
+              ],
+            ),
           ),
         ],
       ),
@@ -1289,6 +1371,8 @@ class _ChartPageState extends ConsumerState<ChartPage> {
                                   color: Colors.grey.shade400,
                                 ),
                               ),
+                              const SizedBox(height: 4),
+                              PaymentMethodBadge(method: bill.paymentMethod),
                             ],
                           ),
                         ),

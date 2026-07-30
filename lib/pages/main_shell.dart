@@ -196,6 +196,7 @@ class _MainShellState extends ConsumerState<MainShell>
                     child: CalculatorKeyboard(
                       categoryName: kb.categoryName,
                       categoryIconPath: kb.categoryIconPath,
+                      initialPaymentMethod: kb.initialPaymentMethod,
                       initialAmount: kb.initialAmount,
                       initialNote: kb.initialNote,
                       initialDate: kb.initialDate,

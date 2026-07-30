@@ -1,21 +1,25 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../models/payment_method.dart';
+
 class KeyboardState {
   final bool visible;
   final double height;
   final String categoryName;
   final String categoryIconPath;
+  final String initialPaymentMethod;
   final double? initialAmount;
   final String? initialNote;
   final DateTime? initialDate;
-  final void Function(double, String, DateTime)? onComplete;
+  final void Function(double, String, DateTime, String)? onComplete;
 
   const KeyboardState({
     this.visible = false,
     this.height = 0,
     this.categoryName = '',
     this.categoryIconPath = '',
+    this.initialPaymentMethod = PaymentMethod.wechat,
     this.initialAmount,
     this.initialNote,
     this.initialDate,
@@ -27,16 +31,18 @@ class KeyboardState {
     double? height,
     String? categoryName,
     String? categoryIconPath,
+    String? initialPaymentMethod,
     double? initialAmount,
     String? initialNote,
     DateTime? initialDate,
-    void Function(double, String, DateTime)? onComplete,
+    void Function(double, String, DateTime, String)? onComplete,
   }) {
     return KeyboardState(
       visible: visible ?? this.visible,
       height: height ?? this.height,
       categoryName: categoryName ?? this.categoryName,
       categoryIconPath: categoryIconPath ?? this.categoryIconPath,
+      initialPaymentMethod: initialPaymentMethod ?? this.initialPaymentMethod,
       initialAmount: initialAmount ?? this.initialAmount,
       initialNote: initialNote ?? this.initialNote,
       initialDate: initialDate ?? this.initialDate,
@@ -52,15 +58,17 @@ class KeyboardNotifier extends Notifier<KeyboardState> {
   void show({
     required String categoryName,
     required String categoryIconPath,
+    String? initialPaymentMethod,
     double? initialAmount,
     String? initialNote,
     DateTime? initialDate,
-    required void Function(double, String, DateTime) onComplete,
+    required void Function(double, String, DateTime, String) onComplete,
   }) {
     state = KeyboardState(
       visible: true,
       categoryName: categoryName,
       categoryIconPath: categoryIconPath,
+      initialPaymentMethod: PaymentMethod.normalize(initialPaymentMethod),
       initialAmount: initialAmount,
       initialNote: initialNote,
       initialDate: initialDate,
@@ -74,7 +82,7 @@ class KeyboardNotifier extends Notifier<KeyboardState> {
   void updateCategory({
     required String categoryName,
     required String categoryIconPath,
-    required void Function(double, String, DateTime) onComplete,
+    required void Function(double, String, DateTime, String) onComplete,
   }) {
     state = state.copyWith(
       categoryName: categoryName,

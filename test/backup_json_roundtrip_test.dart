@@ -49,6 +49,7 @@ void main() {
         id: 'bill_1',
         walletId: 'wallet_default',
         type: 'expense',
+        paymentMethod: 'alipay',
         amount: 12.5,
         category: '餐饮',
         note: '午饭',
@@ -95,6 +96,18 @@ void main() {
     expect((data['records'] as List).length, 1);
     expect((data['budgets'] as List).length, 1);
     expect((data['assets'] as List).length, 1);
+    expect((data['bills'] as List).single['payment_method'], 'alipay');
+
+    await DatabaseHelper.resetForTest();
+    DatabaseHelper.overrideDatabasePathForTest(p.join(tempDir!.path, 'ledger.db'));
+    await DatabaseHelper.instance.database;
+
+    final imported = await ImportService().importFromJson(jsonString);
+    expect(imported.insertedBills, 1);
+    expect(imported.importedWallets, 1);
+
+    final importedBills = await DatabaseHelper.instance.getAllBills();
+    expect(importedBills.single.paymentMethod, 'alipay');
   });
 
   test('import merges without clearing existing data', () async {
@@ -193,6 +206,7 @@ void main() {
     expect(wallets.any((w) => w.id == 'wallet_2'), isTrue);
     expect(budgets.any((b) => b.id == 'import_budget'), isTrue);
     expect(assets.any((a) => a.id == 'import_asset'), isTrue);
+    expect(bills.singleWhere((b) => b.id == 'import_bill').paymentMethod, 'wechat');
   });
 
   test('import generates ids for budget and asset records when missing', () async {

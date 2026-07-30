@@ -8,6 +8,7 @@ import '../providers/bill_provider.dart';
 import '../providers/category_provider.dart';
 import '../providers/keyboard_provider.dart';
 import '../providers/navigation_provider.dart';
+import '../providers/payment_method_provider.dart';
 import '../providers/wallet_provider.dart';
 import '../theme/app_theme.dart';
 import '../utils/icon_helper.dart';
@@ -103,10 +104,10 @@ class _BillingPageState extends ConsumerState<BillingPage>
     final icon = iconJson[cat.iconId];
     setState(() => _selectedIconId = cat.iconId);
     final onComplete = editing != null
-        ? (double amount, String note, DateTime date) =>
-              _updateBill(editing, cat, amount, note, date)
-        : (double amount, String note, DateTime date) =>
-              _saveBill(cat, amount, note, date);
+        ? (double amount, String note, DateTime date, String paymentMethod) =>
+              _updateBill(editing, cat, amount, note, date, paymentMethod)
+        : (double amount, String note, DateTime date, String paymentMethod) =>
+              _saveBill(cat, amount, note, date, paymentMethod);
 
     final kb = ref.read(keyboardProvider);
     if (kb.visible) {
@@ -125,6 +126,7 @@ class _BillingPageState extends ConsumerState<BillingPage>
           .show(
             categoryName: cat.name,
             categoryIconPath: iconPath(icon.iconS),
+            initialPaymentMethod: editing?.paymentMethod ?? ref.read(lastPaymentMethodProvider),
             initialAmount: editing?.amount,
             initialNote: editing?.note,
             initialDate: editing != null ? _billDateToDateTime(editing) : null,
@@ -167,15 +169,22 @@ class _BillingPageState extends ConsumerState<BillingPage>
         .show(
           categoryName: cat.name,
           categoryIconPath: iconPath(icon.iconS),
+          initialPaymentMethod: editing.paymentMethod,
           initialAmount: editing.amount,
           initialNote: editing.note,
           initialDate: editDate,
-          onComplete: (amount, note, date) =>
-              _updateBill(editing, cat, amount, note, date),
+          onComplete: (amount, note, date, paymentMethod) =>
+              _updateBill(editing, cat, amount, note, date, paymentMethod),
         );
   }
 
-  void _saveBill(CategoryEntry cat, double amount, String note, DateTime date) {
+  void _saveBill(
+    CategoryEntry cat,
+    double amount,
+    String note,
+    DateTime date,
+    String paymentMethod,
+  ) {
     final now = DateTime.now();
     final ts = now.millisecondsSinceEpoch;
     final rand = Random().nextInt(999999).toString().padLeft(6, '0');
@@ -191,6 +200,7 @@ class _BillingPageState extends ConsumerState<BillingPage>
       id: id,
       walletId: ref.read(currentWalletIdProvider).value ?? BillItem.defaultWalletId,
       type: _currentType,
+      paymentMethod: paymentMethod,
       amount: amount,
       category: cat.name,
       note: note,
@@ -202,6 +212,7 @@ class _BillingPageState extends ConsumerState<BillingPage>
     );
 
     ref.read(billListProvider.notifier).add(bill);
+    ref.read(lastPaymentMethodProvider.notifier).set(paymentMethod);
     ref.read(keyboardProvider.notifier).hide();
     ref.read(navigationProvider.notifier).setTab(0);
   }
@@ -212,6 +223,7 @@ class _BillingPageState extends ConsumerState<BillingPage>
     double amount,
     String note,
     DateTime date,
+    String paymentMethod,
   ) {
     final now = DateTime.now();
     final originalDay = original.date.substring(0, 10);
@@ -229,6 +241,7 @@ class _BillingPageState extends ConsumerState<BillingPage>
 
     final updated = original.copyWith(
       type: _currentType,
+      paymentMethod: paymentMethod,
       amount: amount,
       category: cat.name,
       note: note,
@@ -239,6 +252,7 @@ class _BillingPageState extends ConsumerState<BillingPage>
     );
 
     ref.read(billListProvider.notifier).updateBill(updated);
+    ref.read(lastPaymentMethodProvider.notifier).set(paymentMethod);
     ref.read(editingBillProvider.notifier).clear();
     ref.read(keyboardProvider.notifier).hide();
     ref.read(navigationProvider.notifier).setTab(0);

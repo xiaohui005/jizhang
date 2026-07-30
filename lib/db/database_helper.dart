@@ -23,6 +23,26 @@ class DatabaseHelper {
     return '$base AND wallet_id = ?';
   }
 
+  String _paymentMethodClause(String base, String? paymentMethod) {
+    if (paymentMethod == null || paymentMethod.isEmpty) return base;
+    return '$base AND payment_method = ?';
+  }
+
+  List<Object?> _walletAndPaymentArgs(
+    List<Object?> args, {
+    String? walletId,
+    String? paymentMethod,
+  }) {
+    final result = [...args];
+    if (walletId != null) {
+      result.add(walletId);
+    }
+    if (paymentMethod != null && paymentMethod.isNotEmpty) {
+      result.add(paymentMethod);
+    }
+    return result;
+  }
+
   static Future<void> resetForTest() async {
     final db = _database;
     _database = null;
@@ -47,13 +67,14 @@ class DatabaseHelper {
 
     return openDatabase(
       path,
-      version: 7,
+      version: 8,
       onCreate: (db, version) async {
         await db.execute('''
           CREATE TABLE bills (
             id TEXT PRIMARY KEY,
             wallet_id TEXT NOT NULL DEFAULT 'wallet_default',
             type TEXT NOT NULL,
+            payment_method TEXT NOT NULL DEFAULT 'wechat',
             amount REAL NOT NULL,
             category TEXT NOT NULL,
             note TEXT NOT NULL,
@@ -115,6 +136,14 @@ class DatabaseHelper {
             ON budgets(wallet_id, period_type, period, is_total, icon_id)
           ''');
           await _ensureDefaultWallet(db);
+        }
+        if (oldVersion < 8) {
+          await db.execute(
+            "ALTER TABLE bills ADD COLUMN payment_method TEXT NOT NULL DEFAULT 'wechat'",
+          );
+          await db.execute(
+            "UPDATE bills SET payment_method = 'wechat' WHERE payment_method IS NULL OR payment_method = '' OR payment_method NOT IN ('wechat', 'alipay', 'bank')",
+          );
         }
       },
     );
@@ -264,12 +293,19 @@ class DatabaseHelper {
   }
 
   /// 查询所有账单，按日期倒序
-  Future<List<BillItem>> getAllBills({String? walletId}) async {
+  Future<List<BillItem>> getAllBills({String? walletId, String? paymentMethod}) async {
     final db = await database;
+    final where = walletId == null
+        ? _paymentMethodClause('1 = 1', paymentMethod)
+        : _paymentMethodClause('wallet_id = ?', paymentMethod);
     final rows = await db.query(
       'bills',
-      where: walletId == null ? null : 'wallet_id = ?',
-      whereArgs: walletId == null ? null : [walletId],
+      where: where,
+      whereArgs: _walletAndPaymentArgs(
+        const <Object?>[],
+        walletId: walletId,
+        paymentMethod: paymentMethod,
+      ),
       orderBy: "substr(date, 1, 10) DESC, sort_at DESC, date DESC",
     );
     return rows.map((r) => BillItem.fromMap(r)).toList();
@@ -280,39 +316,66 @@ class DatabaseHelper {
     String start,
     String end, {
     String? walletId,
+    String? paymentMethod,
   }) async {
     final db = await database;
     final rows = await db.query(
       'bills',
-      where: _walletClause(
-        "substr(date, 1, 10) >= ? AND substr(date, 1, 10) <= ?",
-        walletId,
+      where: _paymentMethodClause(
+        _walletClause(
+          "substr(date, 1, 10) >= ? AND substr(date, 1, 10) <= ?",
+          walletId,
+        ),
+        paymentMethod,
       ),
-      whereArgs: walletId == null ? [start, end] : [start, end, walletId],
+      whereArgs: _walletAndPaymentArgs(
+        [start, end],
+        walletId: walletId,
+        paymentMethod: paymentMethod,
+      ),
       orderBy: "substr(date, 1, 10) DESC, sort_at DESC, date DESC",
     );
     return rows.map((r) => BillItem.fromMap(r)).toList();
   }
 
   /// 按月查询账单 (yearMonth 格式: "2026-03")
-  Future<List<BillItem>> getBillsByMonth(String yearMonth, {String? walletId}) async {
+  Future<List<BillItem>> getBillsByMonth(
+    String yearMonth, {
+    String? walletId,
+    String? paymentMethod,
+  }) async {
     final db = await database;
     final rows = await db.query(
       'bills',
-      where: _walletClause("date LIKE ?", walletId),
-      whereArgs: walletId == null ? ['$yearMonth%'] : ['$yearMonth%', walletId],
+      where: _paymentMethodClause(
+        _walletClause("date LIKE ?", walletId),
+        paymentMethod,
+      ),
+      whereArgs: _walletAndPaymentArgs(
+        ['$yearMonth%'],
+        walletId: walletId,
+        paymentMethod: paymentMethod,
+      ),
       orderBy: "substr(date, 1, 10) DESC, sort_at DESC, date DESC",
     );
     return rows.map((r) => BillItem.fromMap(r)).toList();
   }
 
   /// 根据 id 查询单条账单
-  Future<BillItem?> getBillById(String id, {String? walletId}) async {
+  Future<BillItem?> getBillById(
+    String id, {
+    String? walletId,
+    String? paymentMethod,
+  }) async {
     final db = await database;
     final rows = await db.query(
       'bills',
-      where: _walletClause('id = ?', walletId),
-      whereArgs: walletId == null ? [id] : [id, walletId],
+      where: _paymentMethodClause(_walletClause('id = ?', walletId), paymentMethod),
+      whereArgs: _walletAndPaymentArgs(
+        [id],
+        walletId: walletId,
+        paymentMethod: paymentMethod,
+      ),
     );
     if (rows.isEmpty) return null;
     return BillItem.fromMap(rows.first);
@@ -332,61 +395,117 @@ class DatabaseHelper {
   }
 
   /// 查询某月收入总额
-  Future<double> getMonthlyIncome(String yearMonth, {String? walletId}) async {
+  Future<double> getMonthlyIncome(
+    String yearMonth, {
+    String? walletId,
+    String? paymentMethod,
+  }) async {
     final db = await database;
     final result = await db.rawQuery(
-      walletId == null
-          ? "SELECT COALESCE(SUM(amount), 0) as total FROM bills WHERE type = 'income' AND date LIKE ?"
-          : "SELECT COALESCE(SUM(amount), 0) as total FROM bills WHERE type = 'income' AND date LIKE ? AND wallet_id = ?",
-      walletId == null ? ['$yearMonth%'] : ['$yearMonth%', walletId],
+      paymentMethod == null || paymentMethod.isEmpty
+          ? (walletId == null
+              ? "SELECT COALESCE(SUM(amount), 0) as total FROM bills WHERE type = 'income' AND date LIKE ?"
+              : "SELECT COALESCE(SUM(amount), 0) as total FROM bills WHERE type = 'income' AND date LIKE ? AND wallet_id = ?")
+          : (walletId == null
+              ? "SELECT COALESCE(SUM(amount), 0) as total FROM bills WHERE type = 'income' AND date LIKE ? AND payment_method = ?"
+              : "SELECT COALESCE(SUM(amount), 0) as total FROM bills WHERE type = 'income' AND date LIKE ? AND wallet_id = ? AND payment_method = ?"),
+      paymentMethod == null || paymentMethod.isEmpty
+          ? (walletId == null ? ['$yearMonth%'] : ['$yearMonth%', walletId])
+          : (walletId == null
+              ? ['$yearMonth%', paymentMethod]
+              : ['$yearMonth%', walletId, paymentMethod]),
     );
     return (result.first['total'] as num).toDouble();
   }
 
   /// 查询某月支出总额
-  Future<double> getMonthlyExpense(String yearMonth, {String? walletId}) async {
+  Future<double> getMonthlyExpense(
+    String yearMonth, {
+    String? walletId,
+    String? paymentMethod,
+  }) async {
     final db = await database;
     final result = await db.rawQuery(
-      walletId == null
-          ? "SELECT COALESCE(SUM(amount), 0) as total FROM bills WHERE type = 'expense' AND date LIKE ?"
-          : "SELECT COALESCE(SUM(amount), 0) as total FROM bills WHERE type = 'expense' AND date LIKE ? AND wallet_id = ?",
-      walletId == null ? ['$yearMonth%'] : ['$yearMonth%', walletId],
+      paymentMethod == null || paymentMethod.isEmpty
+          ? (walletId == null
+              ? "SELECT COALESCE(SUM(amount), 0) as total FROM bills WHERE type = 'expense' AND date LIKE ?"
+              : "SELECT COALESCE(SUM(amount), 0) as total FROM bills WHERE type = 'expense' AND date LIKE ? AND wallet_id = ?")
+          : (walletId == null
+              ? "SELECT COALESCE(SUM(amount), 0) as total FROM bills WHERE type = 'expense' AND date LIKE ? AND payment_method = ?"
+              : "SELECT COALESCE(SUM(amount), 0) as total FROM bills WHERE type = 'expense' AND date LIKE ? AND wallet_id = ? AND payment_method = ?"),
+      paymentMethod == null || paymentMethod.isEmpty
+          ? (walletId == null ? ['$yearMonth%'] : ['$yearMonth%', walletId])
+          : (walletId == null
+              ? ['$yearMonth%', paymentMethod]
+              : ['$yearMonth%', walletId, paymentMethod]),
     );
     return (result.first['total'] as num).toDouble();
   }
 
   /// 按年查询账单 (year 格式: "2026")
-  Future<List<BillItem>> getBillsByYear(String year, {String? walletId}) async {
+  Future<List<BillItem>> getBillsByYear(
+    String year, {
+    String? walletId,
+    String? paymentMethod,
+  }) async {
     final db = await database;
     final rows = await db.query(
       'bills',
-      where: _walletClause("date LIKE ?", walletId),
-      whereArgs: walletId == null ? ['$year%'] : ['$year%', walletId],
+      where: _paymentMethodClause(_walletClause("date LIKE ?", walletId), paymentMethod),
+      whereArgs: _walletAndPaymentArgs(
+        ['$year%'],
+        walletId: walletId,
+        paymentMethod: paymentMethod,
+      ),
       orderBy: "substr(date, 1, 10) DESC, sort_at DESC, date DESC",
     );
     return rows.map((r) => BillItem.fromMap(r)).toList();
   }
 
   /// 查询某年收入总额
-  Future<double> getYearlyIncome(String year, {String? walletId}) async {
+  Future<double> getYearlyIncome(
+    String year, {
+    String? walletId,
+    String? paymentMethod,
+  }) async {
     final db = await database;
     final result = await db.rawQuery(
-      walletId == null
-          ? "SELECT COALESCE(SUM(amount), 0) as total FROM bills WHERE type = 'income' AND date LIKE ?"
-          : "SELECT COALESCE(SUM(amount), 0) as total FROM bills WHERE type = 'income' AND date LIKE ? AND wallet_id = ?",
-      walletId == null ? ['$year%'] : ['$year%', walletId],
+      paymentMethod == null || paymentMethod.isEmpty
+          ? (walletId == null
+              ? "SELECT COALESCE(SUM(amount), 0) as total FROM bills WHERE type = 'income' AND date LIKE ?"
+              : "SELECT COALESCE(SUM(amount), 0) as total FROM bills WHERE type = 'income' AND date LIKE ? AND wallet_id = ?")
+          : (walletId == null
+              ? "SELECT COALESCE(SUM(amount), 0) as total FROM bills WHERE type = 'income' AND date LIKE ? AND payment_method = ?"
+              : "SELECT COALESCE(SUM(amount), 0) as total FROM bills WHERE type = 'income' AND date LIKE ? AND wallet_id = ? AND payment_method = ?"),
+      paymentMethod == null || paymentMethod.isEmpty
+          ? (walletId == null ? ['$year%'] : ['$year%', walletId])
+          : (walletId == null
+              ? ['$year%', paymentMethod]
+              : ['$year%', walletId, paymentMethod]),
     );
     return (result.first['total'] as num).toDouble();
   }
 
   /// 查询某年支出总额
-  Future<double> getYearlyExpense(String year, {String? walletId}) async {
+  Future<double> getYearlyExpense(
+    String year, {
+    String? walletId,
+    String? paymentMethod,
+  }) async {
     final db = await database;
     final result = await db.rawQuery(
-      walletId == null
-          ? "SELECT COALESCE(SUM(amount), 0) as total FROM bills WHERE type = 'expense' AND date LIKE ?"
-          : "SELECT COALESCE(SUM(amount), 0) as total FROM bills WHERE type = 'expense' AND date LIKE ? AND wallet_id = ?",
-      walletId == null ? ['$year%'] : ['$year%', walletId],
+      paymentMethod == null || paymentMethod.isEmpty
+          ? (walletId == null
+              ? "SELECT COALESCE(SUM(amount), 0) as total FROM bills WHERE type = 'expense' AND date LIKE ?"
+              : "SELECT COALESCE(SUM(amount), 0) as total FROM bills WHERE type = 'expense' AND date LIKE ? AND wallet_id = ?")
+          : (walletId == null
+              ? "SELECT COALESCE(SUM(amount), 0) as total FROM bills WHERE type = 'expense' AND date LIKE ? AND payment_method = ?"
+              : "SELECT COALESCE(SUM(amount), 0) as total FROM bills WHERE type = 'expense' AND date LIKE ? AND wallet_id = ? AND payment_method = ?"),
+      paymentMethod == null || paymentMethod.isEmpty
+          ? (walletId == null ? ['$year%'] : ['$year%', walletId])
+          : (walletId == null
+              ? ['$year%', paymentMethod]
+              : ['$year%', walletId, paymentMethod]),
     );
     return (result.first['total'] as num).toDouble();
   }
@@ -398,15 +517,26 @@ class DatabaseHelper {
   Future<Map<int, double>> getExpenseGroupByIconId(
     String datePrefix, {
     String? walletId,
+    String? paymentMethod,
   }) async {
     final db = await database;
     final rows = await db.rawQuery(
-      walletId == null
-          ? "SELECT icon_id, COALESCE(SUM(amount), 0) as total FROM bills "
-              "WHERE type = 'expense' AND date LIKE ? GROUP BY icon_id"
-          : "SELECT icon_id, COALESCE(SUM(amount), 0) as total FROM bills "
-              "WHERE type = 'expense' AND date LIKE ? AND wallet_id = ? GROUP BY icon_id",
-      walletId == null ? ['$datePrefix%'] : ['$datePrefix%', walletId],
+      paymentMethod == null || paymentMethod.isEmpty
+          ? (walletId == null
+              ? "SELECT icon_id, COALESCE(SUM(amount), 0) as total FROM bills "
+                  "WHERE type = 'expense' AND date LIKE ? GROUP BY icon_id"
+              : "SELECT icon_id, COALESCE(SUM(amount), 0) as total FROM bills "
+                  "WHERE type = 'expense' AND date LIKE ? AND wallet_id = ? GROUP BY icon_id")
+          : (walletId == null
+              ? "SELECT icon_id, COALESCE(SUM(amount), 0) as total FROM bills "
+                  "WHERE type = 'expense' AND date LIKE ? AND payment_method = ? GROUP BY icon_id"
+              : "SELECT icon_id, COALESCE(SUM(amount), 0) as total FROM bills "
+                  "WHERE type = 'expense' AND date LIKE ? AND wallet_id = ? AND payment_method = ? GROUP BY icon_id"),
+      paymentMethod == null || paymentMethod.isEmpty
+          ? (walletId == null ? ['$datePrefix%'] : ['$datePrefix%', walletId])
+          : (walletId == null
+              ? ['$datePrefix%', paymentMethod]
+              : ['$datePrefix%', walletId, paymentMethod]),
     );
     final result = <int, double>{};
     for (final row in rows) {
@@ -560,25 +690,37 @@ class DatabaseHelper {
   }
 
   /// 账单总条数
-  Future<int> getTotalBillCount({String? walletId}) async {
+  Future<int> getTotalBillCount({String? walletId, String? paymentMethod}) async {
     final db = await database;
     final result = await db.rawQuery(
-      walletId == null
-          ? 'SELECT COUNT(*) as cnt FROM bills'
-          : 'SELECT COUNT(*) as cnt FROM bills WHERE wallet_id = ?',
-      walletId == null ? [] : [walletId],
+      paymentMethod == null || paymentMethod.isEmpty
+          ? (walletId == null
+              ? 'SELECT COUNT(*) as cnt FROM bills'
+              : 'SELECT COUNT(*) as cnt FROM bills WHERE wallet_id = ?')
+          : (walletId == null
+              ? 'SELECT COUNT(*) as cnt FROM bills WHERE payment_method = ?'
+              : 'SELECT COUNT(*) as cnt FROM bills WHERE wallet_id = ? AND payment_method = ?'),
+      paymentMethod == null || paymentMethod.isEmpty
+          ? (walletId == null ? [] : [walletId])
+          : (walletId == null ? [paymentMethod] : [walletId, paymentMethod]),
     );
     return (result.first['cnt'] as int?) ?? 0;
   }
 
   /// 所有账单 distinct 的 yyyy-MM-dd 日期，按升序
-  Future<List<String>> getDistinctBillDates({String? walletId}) async {
+  Future<List<String>> getDistinctBillDates({String? walletId, String? paymentMethod}) async {
     final db = await database;
     final rows = await db.rawQuery(
-      walletId == null
-          ? "SELECT DISTINCT substr(date, 1, 10) AS d FROM bills ORDER BY d ASC"
-          : "SELECT DISTINCT substr(date, 1, 10) AS d FROM bills WHERE wallet_id = ? ORDER BY d ASC",
-      walletId == null ? [] : [walletId],
+      paymentMethod == null || paymentMethod.isEmpty
+          ? (walletId == null
+              ? "SELECT DISTINCT substr(date, 1, 10) AS d FROM bills ORDER BY d ASC"
+              : "SELECT DISTINCT substr(date, 1, 10) AS d FROM bills WHERE wallet_id = ? ORDER BY d ASC")
+          : (walletId == null
+              ? "SELECT DISTINCT substr(date, 1, 10) AS d FROM bills WHERE payment_method = ? ORDER BY d ASC"
+              : "SELECT DISTINCT substr(date, 1, 10) AS d FROM bills WHERE wallet_id = ? AND payment_method = ? ORDER BY d ASC"),
+      paymentMethod == null || paymentMethod.isEmpty
+          ? (walletId == null ? [] : [walletId])
+          : (walletId == null ? [paymentMethod] : [walletId, paymentMethod]),
     );
     return [
       for (final row in rows)
@@ -588,13 +730,19 @@ class DatabaseHelper {
 
   /// 各 icon_id 对应的账单笔数（不区分收支），用于徽章成就判定。
   /// 返回 `Map<icon_id, 笔数>`
-  Future<Map<int, int>> getBillCountGroupByIconId({String? walletId}) async {
+  Future<Map<int, int>> getBillCountGroupByIconId({String? walletId, String? paymentMethod}) async {
     final db = await database;
     final rows = await db.rawQuery(
-      walletId == null
-          ? 'SELECT icon_id, COUNT(*) AS cnt FROM bills GROUP BY icon_id'
-          : 'SELECT icon_id, COUNT(*) AS cnt FROM bills WHERE wallet_id = ? GROUP BY icon_id',
-      walletId == null ? [] : [walletId],
+      paymentMethod == null || paymentMethod.isEmpty
+          ? (walletId == null
+              ? 'SELECT icon_id, COUNT(*) AS cnt FROM bills GROUP BY icon_id'
+              : 'SELECT icon_id, COUNT(*) AS cnt FROM bills WHERE wallet_id = ? GROUP BY icon_id')
+          : (walletId == null
+              ? 'SELECT icon_id, COUNT(*) AS cnt FROM bills WHERE payment_method = ? GROUP BY icon_id'
+              : 'SELECT icon_id, COUNT(*) AS cnt FROM bills WHERE wallet_id = ? AND payment_method = ? GROUP BY icon_id'),
+      paymentMethod == null || paymentMethod.isEmpty
+          ? (walletId == null ? [] : [walletId])
+          : (walletId == null ? [paymentMethod] : [walletId, paymentMethod]),
     );
     final result = <int, int>{};
     for (final row in rows) {

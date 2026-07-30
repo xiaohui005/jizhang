@@ -12,6 +12,7 @@ import '../providers/navigation_provider.dart';
 import '../theme/app_theme.dart';
 import '../utils/format.dart';
 import '../utils/icon_helper.dart';
+import '../widgets/payment_method_widgets.dart';
 import '../widgets/month_picker.dart';
 
 class BookkeepingCalendarPage extends ConsumerStatefulWidget {
@@ -440,15 +441,22 @@ class _BookkeepingCalendarPageState
                   ),
             const SizedBox(width: 8),
             Expanded(
-              child: Text(
-                title,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w500,
-                  color: AppColors.textPrimary,
-                ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  PaymentMethodBadge(method: bill.paymentMethod),
+                ],
               ),
             ),
             const SizedBox(width: 12),

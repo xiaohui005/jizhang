@@ -7,6 +7,7 @@ import '../providers/budget_provider.dart';
 import '../utils/format.dart';
 import '../data/account_data.dart';
 import '../utils/icon_helper.dart';
+import '../widgets/payment_method_widgets.dart';
 import '../widgets/month_picker.dart';
 import '../providers/navigation_provider.dart';
 import 'asset_manager_page.dart';
@@ -498,6 +499,8 @@ class _HomePageState extends ConsumerState<HomePage> {
                     ),
                     overflow: TextOverflow.ellipsis,
                   ),
+                  const SizedBox(height: 4),
+                  PaymentMethodBadge(method: bill.paymentMethod),
                 ],
               ),
             ),

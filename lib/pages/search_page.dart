@@ -6,6 +6,7 @@ import '../models/bill_item.dart';
 import '../theme/app_theme.dart';
 import '../utils/format.dart';
 import '../utils/icon_helper.dart';
+import '../widgets/payment_method_widgets.dart';
 import '../widgets/date_picker.dart';
 
 enum _SearchField { all, category, note, amount }
@@ -27,12 +28,14 @@ class _SearchPageState extends State<SearchPage> {
 
   _SearchField _activeSearchField = _SearchField.all;
   _EntryFilter _activeEntryFilter = _EntryFilter.all;
+  String _activePaymentMethod = '';
   bool _activeCustomTime = false;
   DateTime? _activeStartDate;
   DateTime? _activeEndDate;
 
   _SearchField _tempSearchField = _SearchField.all;
   _EntryFilter _tempEntryFilter = _EntryFilter.all;
+  String _tempPaymentMethod = '';
   bool _tempCustomTime = false;
   DateTime? _tempStartDate;
   DateTime? _tempEndDate;
@@ -287,6 +290,25 @@ class _SearchPageState extends State<SearchPage> {
               ),
               const SizedBox(height: 20),
               _buildFilterRow(
+                label: '支付方式',
+                children: [
+                  _buildChoice(
+                    label: '不限',
+                    value: '',
+                    groupValue: _tempPaymentMethod,
+                    onSelected: (value) => _tempPaymentMethod = value,
+                  ),
+                  for (final method in paymentMethodFilterValues().skip(1))
+                    _buildChoice(
+                      label: paymentMethodLabel(method),
+                      value: method,
+                      groupValue: _tempPaymentMethod,
+                      onSelected: (value) => _tempPaymentMethod = value,
+                    ),
+                ],
+              ),
+              const SizedBox(height: 20),
+              _buildFilterRow(
                 label: '时间',
                 children: [
                   _buildChoice(
@@ -464,7 +486,8 @@ class _SearchPageState extends State<SearchPage> {
     final isAllDefault =
         _tempSearchField == _SearchField.all &&
         _tempEntryFilter == _EntryFilter.all &&
-        !_tempCustomTime;
+        !_tempCustomTime &&
+        _tempPaymentMethod.isEmpty;
     return _buildPanelButton(
       label: '重置',
       color: isAllDefault ? const Color(0xFFEDEFF2) : Colors.black87,
@@ -634,15 +657,22 @@ class _SearchPageState extends State<SearchPage> {
           ),
           const SizedBox(width: 8),
           Expanded(
-            child: Text(
-              title,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w700,
-                color: Colors.black87,
-              ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.black87,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                PaymentMethodBadge(method: bill.paymentMethod),
+              ],
             ),
           ),
           const SizedBox(width: 12),
@@ -687,10 +717,15 @@ class _SearchPageState extends State<SearchPage> {
     final hasCriteria =
         query.isNotEmpty ||
         _activeEntryFilter != _EntryFilter.all ||
+        _activePaymentMethod.isNotEmpty ||
         hasTimeFilter;
     if (!hasCriteria) return const <BillItem>[];
 
     final results = bills.where((bill) {
+      if (_activePaymentMethod.isNotEmpty &&
+          bill.paymentMethod != _activePaymentMethod) {
+        return false;
+      }
       if (_activeEntryFilter == _EntryFilter.income && bill.type != 'income') {
         return false;
       }
@@ -761,6 +796,7 @@ class _SearchPageState extends State<SearchPage> {
       }
       _tempSearchField = _activeSearchField;
       _tempEntryFilter = _activeEntryFilter;
+      _tempPaymentMethod = _activePaymentMethod;
       _tempCustomTime = _activeCustomTime;
       _tempStartDate = _activeStartDate;
       _tempEndDate = _activeEndDate;
@@ -772,6 +808,7 @@ class _SearchPageState extends State<SearchPage> {
     setState(() {
       _activeSearchField = _tempSearchField;
       _activeEntryFilter = _tempEntryFilter;
+      _activePaymentMethod = _tempPaymentMethod;
       _activeCustomTime = _tempCustomTime;
       _activeStartDate = _tempCustomTime ? _tempStartDate : null;
       _activeEndDate = _tempCustomTime ? _tempEndDate : null;
@@ -783,11 +820,13 @@ class _SearchPageState extends State<SearchPage> {
     setState(() {
       _activeSearchField = _SearchField.all;
       _activeEntryFilter = _EntryFilter.all;
+      _activePaymentMethod = '';
       _activeCustomTime = false;
       _activeStartDate = null;
       _activeEndDate = null;
       _tempSearchField = _SearchField.all;
       _tempEntryFilter = _EntryFilter.all;
+      _tempPaymentMethod = '';
       _tempCustomTime = false;
       _tempStartDate = null;
       _tempEndDate = null;

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
+import '../models/payment_method.dart';
 import 'date_picker.dart';
 import 'note_editor.dart';
 
@@ -9,15 +10,22 @@ class CalculatorKeyboard extends StatefulWidget {
     required this.onComplete,
     required this.categoryName,
     required this.categoryIconPath,
+    required this.initialPaymentMethod,
     this.initialAmount,
     this.initialNote,
     this.initialDate,
     this.onClose,
   });
 
-  final void Function(double amount, String note, DateTime date) onComplete;
+  final void Function(
+    double amount,
+    String note,
+    DateTime date,
+    String paymentMethod,
+  ) onComplete;
   final String categoryName;
   final String categoryIconPath;
+  final String initialPaymentMethod;
   final double? initialAmount;
   final String? initialNote;
   final DateTime? initialDate;
@@ -39,6 +47,7 @@ class _CalculatorKeyboardState extends State<CalculatorKeyboard>
   bool _startNew = true;
   DateTime _selectedDate = DateTime.now();
   String _note = '';
+  String _paymentMethod = PaymentMethod.wechat;
   double _bottomSafeArea = 0;
 
   double _readPlatformBottomSafeArea() {
@@ -58,12 +67,21 @@ class _CalculatorKeyboardState extends State<CalculatorKeyboard>
     }
     if (widget.initialNote != null) _note = widget.initialNote!;
     if (widget.initialDate != null) _selectedDate = widget.initialDate!;
+    _paymentMethod = PaymentMethod.normalize(widget.initialPaymentMethod);
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
+  }
+
+  @override
+  void didUpdateWidget(covariant CalculatorKeyboard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.initialPaymentMethod != oldWidget.initialPaymentMethod) {
+      _paymentMethod = PaymentMethod.normalize(widget.initialPaymentMethod);
+    }
   }
 
   @override
@@ -188,7 +206,7 @@ class _CalculatorKeyboardState extends State<CalculatorKeyboard>
       return;
     }
     if (amount <= 0) return;
-    widget.onComplete(amount, _note, _selectedDate);
+    widget.onComplete(amount, _note, _selectedDate, _paymentMethod);
   }
 
   Future<void> _pickDate() async {
@@ -259,6 +277,7 @@ class _CalculatorKeyboardState extends State<CalculatorKeyboard>
           mainAxisSize: MainAxisSize.min,
           children: [
             _buildAmountBar(),
+            _buildPaymentMethodBar(),
             _buildNoteBar(),
             const Divider(height: 1),
             _buildKeyboard(),
@@ -312,6 +331,51 @@ class _CalculatorKeyboardState extends State<CalculatorKeyboard>
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildPaymentMethodBar() {
+    final options = PaymentMethod.values;
+    return Container(
+      margin: const EdgeInsets.fromLTRB(12, 2, 12, 8),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF7F7F7),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Row(
+        children: [
+          Text(
+            '支付方式：',
+            style: TextStyle(
+              fontSize: 13,
+              color: AppColors.textPrimary,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          Expanded(
+            child: ToggleButtons(
+              isSelected: [for (final method in options) method == _paymentMethod],
+              onPressed: (index) {
+                setState(() => _paymentMethod = options[index]);
+              },
+              borderRadius: BorderRadius.circular(8),
+              constraints: const BoxConstraints(minHeight: 32, minWidth: 64),
+              textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+              selectedColor: Colors.white,
+              fillColor: AppColors.primary,
+              color: AppColors.textSecondary,
+              children: [
+                for (final method in options)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 10),
+                    child: Text(paymentMethodLabel(method)),
+                  ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

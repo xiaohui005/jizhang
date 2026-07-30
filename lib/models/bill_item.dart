@@ -1,9 +1,12 @@
+import 'payment_method.dart';
+
 class BillItem {
   static const defaultWalletId = 'wallet_default';
 
   final String id;
   final String walletId;
   final String type; // 'expense' | 'income'
+  final String paymentMethod;
   final double amount;
   final String category;
   final String note;
@@ -17,6 +20,7 @@ class BillItem {
     required this.id,
     this.walletId = defaultWalletId,
     required this.type,
+    String paymentMethod = PaymentMethod.wechat,
     required this.amount,
     required this.category,
     required this.note,
@@ -25,13 +29,14 @@ class BillItem {
     required this.iconId,
     required this.createdAt,
     required this.updatedAt,
-  });
+  }) : paymentMethod = PaymentMethod.normalize(paymentMethod);
 
   Map<String, dynamic> toMap() {
     return {
       'id': id,
       'wallet_id': walletId,
       'type': type,
+      'payment_method': paymentMethod,
       'amount': amount,
       'category': category,
       'note': note,
@@ -48,6 +53,7 @@ class BillItem {
       id: map['id'] as String,
       walletId: (map['wallet_id'] as String?) ?? defaultWalletId,
       type: map['type'] as String,
+      paymentMethod: PaymentMethod.normalize(map['payment_method'] as String?),
       amount: (map['amount'] as num).toDouble(),
       category: map['category'] as String,
       note: map['note'] as String,
@@ -63,6 +69,7 @@ class BillItem {
     String? id,
     String? walletId,
     String? type,
+    String? paymentMethod,
     double? amount,
     String? category,
     String? note,
@@ -76,6 +83,9 @@ class BillItem {
       id: id ?? this.id,
       walletId: walletId ?? this.walletId,
       type: type ?? this.type,
+      paymentMethod: paymentMethod == null
+          ? this.paymentMethod
+          : PaymentMethod.normalize(paymentMethod),
       amount: amount ?? this.amount,
       category: category ?? this.category,
       note: note ?? this.note,

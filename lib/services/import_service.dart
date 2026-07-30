@@ -5,6 +5,7 @@ import '../db/database_helper.dart';
 import '../models/asset_item.dart';
 import '../models/bill_item.dart';
 import '../models/budget_item.dart';
+import '../models/payment_method.dart';
 import '../models/wallet_item.dart';
 
 /// myapp 导出的 JSON 中单条账单记录的结构
@@ -16,6 +17,7 @@ class _ImportedRecord {
   final String category;
   final String note;
   final String date;
+  final String paymentMethod;
   final int iconId;
   final String sortAt;
   final String createdAt;
@@ -29,6 +31,7 @@ class _ImportedRecord {
     required this.category,
     required this.note,
     required this.date,
+    required this.paymentMethod,
     required this.iconId,
     required this.sortAt,
     required this.createdAt,
@@ -45,6 +48,7 @@ class _ImportedRecord {
       category: (json['category'] as String?) ?? '其他',
       note: (json['note'] as String?) ?? '',
       date: fallbackDate,
+      paymentMethod: PaymentMethod.normalize(json['payment_method'] as String?),
       iconId: (json['iconId'] as int?) ?? (json['icon_id'] as int?) ?? -1,
       sortAt: (json['sort_at'] as String?) ?? fallbackDate,
       createdAt: (json['created_at'] as String?) ?? '',
@@ -54,13 +58,16 @@ class _ImportedRecord {
 
   BillItem toModel(String fallbackWalletId, {String? idOverride}) {
     return BillItem(
-      id: (idOverride ?? id).isEmpty ? 'import_${date}_${amount}_${category}' : (idOverride ?? id),
+      id: (idOverride ?? id).isEmpty
+          ? 'import_${date}_${amount}_${category}_${paymentMethod}'
+          : (idOverride ?? id),
       walletId: walletId.isEmpty ? fallbackWalletId : walletId,
       type: type,
       amount: amount,
       category: category,
       note: note,
       date: date,
+      paymentMethod: paymentMethod,
       sortAt: sortAt.isEmpty ? date : sortAt,
       iconId: iconId,
       createdAt: createdAt.isEmpty ? DateTime.now().toIso8601String() : createdAt,
@@ -397,10 +404,12 @@ class ImportService {
     final existingAssetIds = (await _db.getAllAssets()).map((a) => a.id).toSet();
 
     for (final record in data.records) {
-      final id = record.id.isNotEmpty
-          ? record.id
-          : 'import_${insertedBills + skippedBills}_${record.date}_${record.amount}_${record.category}';
-      if (existingBillIds.contains(id)) {
+      final legacyGeneratedId = 'import_${record.date}_${record.amount}_${record.category}';
+      final generatedId =
+          'import_${insertedBills + skippedBills}_${record.date}_${record.amount}_${record.category}_${record.paymentMethod}';
+      final id = record.id.isNotEmpty ? record.id : generatedId;
+      if (existingBillIds.contains(id) ||
+          (record.id.isEmpty && existingBillIds.contains(legacyGeneratedId))) {
         skippedBills++;
         continue;
       }
