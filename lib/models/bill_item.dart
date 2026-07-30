@@ -29,7 +29,12 @@ class BillItem {
     required this.iconId,
     required this.createdAt,
     required this.updatedAt,
-  }) : paymentMethod = PaymentMethod.normalize(paymentMethod);
+  }) : paymentMethod =
+           paymentMethod == PaymentMethod.wechat ||
+                   paymentMethod == PaymentMethod.alipay ||
+                   paymentMethod == PaymentMethod.bank
+               ? paymentMethod
+               : PaymentMethod.wechat;
 
   Map<String, dynamic> toMap() {
     return {
