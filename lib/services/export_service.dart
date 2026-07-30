@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
 
@@ -68,16 +69,15 @@ class ExportService {
     final jsonString = await buildExportJson();
     final timestamp = DateTime.now().millisecondsSinceEpoch;
     final fileName = '我想省备份_$timestamp.json';
+    final bytes = Uint8List.fromList(utf8.encode(jsonString));
     final path = await FilePicker.platform.saveFile(
       dialogTitle: '保存 JSON 备份',
       fileName: fileName,
       initialDirectory: await _suggestInitialDirectory(),
+      bytes: bytes,
     );
     if (path == null || path.isEmpty) return null;
 
-    final file = File(path);
-    await file.create(recursive: true);
-    await file.writeAsString(jsonString, encoding: utf8);
-    return file.path;
+    return path;
   }
 }
