@@ -7,6 +7,7 @@ import '../db/database_helper.dart';
 import '../models/bill_item.dart';
 import '../providers/chart_provider.dart';
 import '../providers/navigation_provider.dart';
+import '../providers/payment_method_provider.dart';
 import '../theme/app_theme.dart';
 import '../utils/icon_helper.dart';
 import '../widgets/payment_method_widgets.dart';
@@ -209,6 +210,17 @@ class _ChartPageState extends ConsumerState<ChartPage> {
 
   @override
   Widget build(BuildContext context) {
+    ref.watch(paymentMethodsProvider);
+    ref.listen(paymentMethodsProvider, (_, next) {
+      final ids = (next.value ?? const []).map((e) => e.id).toSet();
+      if (_selectedPaymentMethod.isNotEmpty && !ids.contains(_selectedPaymentMethod)) {
+        setState(() {
+          _selectedPaymentMethod = '';
+          _loading = true;
+        });
+        _loadData();
+      }
+    });
     // 切入图表页时重置到当前日期
     ref.listen(navigationProvider, (prev, next) {
       if (next == 1 && prev != 1) _resetToNow();

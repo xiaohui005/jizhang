@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:ledger_flutter/db/database_helper.dart';
 import 'package:ledger_flutter/models/payment_method.dart';
@@ -33,15 +34,17 @@ void main() {
     String? paymentMethod;
 
     await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: CalculatorKeyboard(
-            categoryName: '餐饮',
-            categoryIconPath: 'assets/images/1_s.png',
-            initialPaymentMethod: PaymentMethod.alipay,
-            onComplete: (amount, note, date, method) {
-              paymentMethod = method;
-            },
+      ProviderScope(
+        child: MaterialApp(
+          home: Scaffold(
+            body: CalculatorKeyboard(
+              categoryName: '餐饮',
+              categoryIconPath: 'assets/images/1_s.png',
+              initialPaymentMethod: PaymentMethod.alipay,
+              onComplete: (amount, note, date, method) {
+                paymentMethod = method;
+              },
+            ),
           ),
         ),
       ),

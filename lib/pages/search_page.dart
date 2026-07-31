@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/account_data.dart';
 import '../db/database_helper.dart';
 import '../models/bill_item.dart';
+import '../providers/payment_method_provider.dart';
 import '../theme/app_theme.dart';
 import '../utils/format.dart';
 import '../utils/icon_helper.dart';
@@ -13,14 +15,14 @@ enum _SearchField { all, category, note, amount }
 
 enum _EntryFilter { all, income, expense }
 
-class SearchPage extends StatefulWidget {
+class SearchPage extends ConsumerStatefulWidget {
   const SearchPage({super.key});
 
   @override
-  State<SearchPage> createState() => _SearchPageState();
+  ConsumerState<SearchPage> createState() => _SearchPageState();
 }
 
-class _SearchPageState extends State<SearchPage> {
+class _SearchPageState extends ConsumerState<SearchPage> {
   final TextEditingController _queryCtrl = TextEditingController();
   late final Future<List<BillItem>> _billsFuture;
 
@@ -54,6 +56,17 @@ class _SearchPageState extends State<SearchPage> {
 
   @override
   Widget build(BuildContext context) {
+    ref.watch(paymentMethodsProvider);
+    ref.listen(paymentMethodsProvider, (_, next) {
+      final ids = (next.value ?? const []).map((e) => e.id).toSet();
+      if ((_activePaymentMethod.isNotEmpty && !ids.contains(_activePaymentMethod)) ||
+          (_tempPaymentMethod.isNotEmpty && !ids.contains(_tempPaymentMethod))) {
+        setState(() {
+          _activePaymentMethod = '';
+          _tempPaymentMethod = '';
+        });
+      }
+    });
     return Scaffold(
       resizeToAvoidBottomInset: false,
       backgroundColor: AppColors.surface,

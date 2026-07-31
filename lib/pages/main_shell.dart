@@ -7,6 +7,7 @@ import '../providers/badge_seen_provider.dart';
 import '../providers/bill_provider.dart';
 import '../providers/keyboard_provider.dart';
 import '../providers/navigation_provider.dart';
+import '../providers/payment_method_provider.dart';
 import '../theme/app_theme.dart';
 import '../widgets/badge_unlock_dialog.dart';
 import '../widgets/bottom_nav_bar.dart';
@@ -121,6 +122,7 @@ class _MainShellState extends ConsumerState<MainShell>
   Widget build(BuildContext context) {
     final currentIndex = ref.watch(navigationProvider);
     final kb = ref.watch(keyboardProvider);
+    ref.watch(paymentMethodsProvider);
 
     // 监听徽章数据变化：每次账单变更后 [badgeProvider] 都会被重建，这里
     // 在新数据到达时检测「这次又获得了哪些过去没看过的徽章」并依次弹窗提示。

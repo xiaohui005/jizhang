@@ -33,7 +33,7 @@ void main() {
     }
   });
 
-  test('export json contains wallets bills budgets assets', () async {
+  test('export json contains wallets bills budgets assets payment methods', () async {
     final db = DatabaseHelper.instance;
     await db.database;
     await db.insertWallet(
@@ -58,6 +58,23 @@ void main() {
         iconId: 0,
         createdAt: '2026-07-29 12:00:00',
         updatedAt: '2026-07-29 12:00:00',
+      ),
+    );
+    final customMethodId = await db.insertPaymentMethod('现金');
+    await db.insertBill(
+      BillItem(
+        id: 'bill_cash',
+        walletId: 'wallet_default',
+        type: 'expense',
+        paymentMethod: customMethodId,
+        amount: 8.8,
+        category: '餐饮',
+        note: '零花钱',
+        date: '2026-07-29 13:00:00',
+        sortAt: '2026-07-29 13:00:00',
+        iconId: 0,
+        createdAt: '2026-07-29 13:00:00',
+        updatedAt: '2026-07-29 13:00:00',
       ),
     );
     await db.insertOrReplaceBudget(
@@ -90,24 +107,40 @@ void main() {
     final jsonString = await ExportService().buildExportJson();
     final data = jsonDecode(jsonString) as Map<String, dynamic>;
 
-    expect(data['formatVersion'], 2);
+    expect(data['formatVersion'], 3);
     expect((data['wallets'] as List).length, greaterThanOrEqualTo(2));
-    expect((data['bills'] as List).length, 1);
-    expect((data['records'] as List).length, 1);
+    expect((data['bills'] as List).length, 2);
+    expect((data['records'] as List).length, 2);
     expect((data['budgets'] as List).length, 1);
     expect((data['assets'] as List).length, 1);
-    expect((data['bills'] as List).single['payment_method'], 'alipay');
+    expect((data['payment_methods'] as List).length, 4);
+    expect(
+      (data['payment_methods'] as List).any(
+        (row) => row['id'] == customMethodId && row['name'] == '现金',
+      ),
+      isTrue,
+    );
+    expect(
+      (data['bills'] as List).any((row) => row['payment_method'] == customMethodId),
+      isTrue,
+    );
 
     await DatabaseHelper.resetForTest();
     DatabaseHelper.overrideDatabasePathForTest(p.join(tempDir!.path, 'ledger.db'));
     await DatabaseHelper.instance.database;
 
     final imported = await ImportService().importFromJson(jsonString);
-    expect(imported.insertedBills, 1);
+    expect(imported.insertedBills, 2);
     expect(imported.importedWallets, 1);
+    expect(imported.importedPaymentMethods, 4);
 
     final importedBills = await DatabaseHelper.instance.getAllBills();
-    expect(importedBills.single.paymentMethod, 'alipay');
+    expect(importedBills.any((bill) => bill.paymentMethod == customMethodId), isTrue);
+    final importedMethods = await DatabaseHelper.instance.getPaymentMethods();
+    expect(
+      importedMethods.any((m) => m.id == customMethodId && m.name == '现金'),
+      isTrue,
+    );
   });
 
   test('import merges without clearing existing data', () async {

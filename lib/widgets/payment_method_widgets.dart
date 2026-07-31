@@ -1,47 +1,25 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../models/payment_method.dart';
+import '../services/payment_method_catalog.dart';
 import '../theme/app_theme.dart';
+import '../providers/payment_method_provider.dart';
 
-List<String> paymentMethodFilterValues() => <String>['', ...PaymentMethod.values];
+List<String> paymentMethodFilterValues() => PaymentMethodCatalog.instance.filterValues;
 
 String paymentMethodLabel(String method) {
-  switch (PaymentMethod.normalize(method)) {
-    case PaymentMethod.alipay:
-      return '支付宝';
-    case PaymentMethod.bank:
-      return '银行卡';
-    case PaymentMethod.wechat:
-    default:
-      return '微信';
-  }
+  return PaymentMethodCatalog.instance.label(method);
 }
 
 IconData paymentMethodIcon(String method) {
-  switch (PaymentMethod.normalize(method)) {
-    case PaymentMethod.alipay:
-      return Icons.payments_outlined;
-    case PaymentMethod.bank:
-      return Icons.credit_card_outlined;
-    case PaymentMethod.wechat:
-    default:
-      return Icons.chat_bubble_outline;
-  }
+  return PaymentMethodCatalog.instance.icon(method);
 }
 
 Color paymentMethodColor(String method) {
-  switch (PaymentMethod.normalize(method)) {
-    case PaymentMethod.alipay:
-      return const Color(0xFF1677FF);
-    case PaymentMethod.bank:
-      return const Color(0xFF596277);
-    case PaymentMethod.wechat:
-    default:
-      return const Color(0xFF07C160);
-  }
+  return PaymentMethodCatalog.instance.color(method);
 }
 
-class PaymentMethodBadge extends StatelessWidget {
+class PaymentMethodBadge extends ConsumerWidget {
   const PaymentMethodBadge({
     super.key,
     required this.method,
@@ -52,7 +30,8 @@ class PaymentMethodBadge extends StatelessWidget {
   final bool compact;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    ref.watch(paymentMethodsProvider);
     final color = paymentMethodColor(method);
     return DecoratedBox(
       decoration: BoxDecoration(

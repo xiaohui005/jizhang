@@ -15,9 +15,10 @@ class ExportService {
     final budgets = await _db.getAllBudgets();
     final assets = await _db.getAllAssets();
     final categories = await _db.getAllCategories();
+    final paymentMethods = await _db.getPaymentMethods();
 
     return {
-      'formatVersion': 2,
+      'formatVersion': 3,
       'source': 'ledger_flutter',
       'exportedAt': DateTime.now().toIso8601String(),
       'wallets': [for (final item in wallets) item.toMap()],
@@ -25,6 +26,7 @@ class ExportService {
       'records': [for (final item in bills) item.toMap()],
       'budgets': [for (final item in budgets) item.toMap()],
       'assets': [for (final item in assets) item.toMap()],
+      'payment_methods': [for (final item in paymentMethods) item.toMap()],
       'categories': {
         'expense': [
           for (final c in categories.where((c) => c.inEx == 0))

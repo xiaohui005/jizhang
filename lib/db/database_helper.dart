@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 import '../data/account_data.dart';
@@ -5,7 +7,9 @@ import '../models/asset_item.dart';
 import '../models/bill_item.dart';
 import '../models/budget_item.dart';
 import '../models/category_entry.dart';
+import '../models/payment_method_item.dart';
 import '../models/wallet_item.dart';
+import '../models/payment_method.dart';
 
 class DatabaseHelper {
   DatabaseHelper._();
@@ -67,7 +71,7 @@ class DatabaseHelper {
 
     return openDatabase(
       path,
-      version: 8,
+      version: 9,
       onCreate: (db, version) async {
         await db.execute('''
           CREATE TABLE bills (
@@ -90,8 +94,10 @@ class DatabaseHelper {
         await _createWalletsTable(db);
         await _createAssetsTable(db);
         await _createCategoriesTable(db);
+        await _createPaymentMethodsTable(db);
         await _seedDefaultWallet(db);
         await _seedDefaultCategories(db);
+        await _seedDefaultPaymentMethods(db);
       },
       onUpgrade: (db, oldVersion, newVersion) async {
         if (oldVersion < 2) {
@@ -144,6 +150,10 @@ class DatabaseHelper {
           await db.execute(
             "UPDATE bills SET payment_method = 'wechat' WHERE payment_method IS NULL OR payment_method = '' OR payment_method NOT IN ('wechat', 'alipay', 'bank')",
           );
+        }
+        if (oldVersion < 9) {
+          await _createPaymentMethodsTable(db);
+          await _seedDefaultPaymentMethods(db);
         }
       },
     );
@@ -247,6 +257,66 @@ class DatabaseHelper {
     ''');
   }
 
+  Future<void> _createPaymentMethodsTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS payment_methods (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        sort_order INTEGER NOT NULL,
+        is_default INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )
+    ''');
+    await db.execute('''
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_payment_methods_name
+      ON payment_methods(name)
+    ''');
+    await db.execute('''
+      CREATE INDEX IF NOT EXISTS idx_payment_methods_order
+      ON payment_methods(sort_order, id)
+    ''');
+  }
+
+  Future<void> _seedDefaultPaymentMethods(Database db) async {
+    final now = DateTime.now().toIso8601String();
+    final batch = db.batch();
+    final defaults = <Map<String, Object?>>[
+      {
+        'id': PaymentMethod.wechat,
+        'name': '微信',
+        'sort_order': 0,
+        'is_default': 1,
+        'created_at': now,
+        'updated_at': now,
+      },
+      {
+        'id': PaymentMethod.alipay,
+        'name': '支付宝',
+        'sort_order': 1,
+        'is_default': 1,
+        'created_at': now,
+        'updated_at': now,
+      },
+      {
+        'id': PaymentMethod.bank,
+        'name': '银行卡',
+        'sort_order': 2,
+        'is_default': 1,
+        'created_at': now,
+        'updated_at': now,
+      },
+    ];
+    for (final row in defaults) {
+      batch.insert(
+        'payment_methods',
+        row,
+        conflictAlgorithm: ConflictAlgorithm.ignore,
+      );
+    }
+    await batch.commit(noResult: true);
+  }
+
   Future<void> _ensureDefaultWallet(Database db) async {
     final wallets = await db.query(
       'wallets',
@@ -283,6 +353,98 @@ class DatabaseHelper {
       );
     }
     await batch.commit(noResult: true);
+  }
+
+  Future<List<PaymentMethodItem>> getPaymentMethods() async {
+    final db = await database;
+    final rows = await db.query(
+      'payment_methods',
+      orderBy: 'sort_order ASC, created_at ASC, id ASC',
+    );
+    return rows.map(PaymentMethodItem.fromMap).toList();
+  }
+
+  Future<void> upsertPaymentMethod(PaymentMethodItem item) async {
+    final db = await database;
+    await db.insert(
+      'payment_methods',
+      item.toMap(),
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  Future<bool> hasPaymentMethodName(String name, {String? excludeId}) async {
+    final db = await database;
+    final args = <Object?>[name];
+    var where = 'name = ?';
+    if (excludeId != null) {
+      where += ' AND id != ?';
+      args.add(excludeId);
+    }
+    final rows = await db.query('payment_methods', where: where, whereArgs: args, limit: 1);
+    return rows.isNotEmpty;
+  }
+
+  Future<String> insertPaymentMethod(String name) async {
+    final db = await database;
+    final now = DateTime.now().toIso8601String();
+    final maxRow = await db.rawQuery('SELECT COALESCE(MAX(sort_order), -1) AS max_order FROM payment_methods');
+    final nextOrder = ((maxRow.first['max_order'] as num?)?.toInt() ?? -1) + 1;
+    final id = 'pm_${DateTime.now().millisecondsSinceEpoch}_${Random().nextInt(10000)}';
+    await db.insert('payment_methods', {
+      'id': id,
+      'name': name,
+      'sort_order': nextOrder,
+      'is_default': 0,
+      'created_at': now,
+      'updated_at': now,
+    });
+    return id;
+  }
+
+  Future<int> updatePaymentMethodName({required String id, required String name}) async {
+    final db = await database;
+    final now = DateTime.now().toIso8601String();
+    return db.update(
+      'payment_methods',
+      {'name': name, 'updated_at': now},
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
+  Future<void> reorderPaymentMethods(List<String> orderedIds) async {
+    final db = await database;
+    final now = DateTime.now().toIso8601String();
+    final batch = db.batch();
+    for (var i = 0; i < orderedIds.length; i++) {
+      batch.update(
+        'payment_methods',
+        {'sort_order': i, 'updated_at': now},
+        where: 'id = ?',
+        whereArgs: [orderedIds[i]],
+      );
+    }
+    await batch.commit(noResult: true);
+  }
+
+  Future<int> deletePaymentMethod(String id) async {
+    final db = await database;
+    return db.delete('payment_methods', where: 'id = ?', whereArgs: [id]);
+  }
+
+  Future<int> replacePaymentMethodOnBills({
+    required String fromId,
+    required String toId,
+  }) async {
+    final db = await database;
+    final now = DateTime.now().toIso8601String();
+    return db.update(
+      'bills',
+      {'payment_method': toId, 'updated_at': now},
+      where: 'payment_method = ?',
+      whereArgs: [fromId],
+    );
   }
 
   /// 插入一条账单

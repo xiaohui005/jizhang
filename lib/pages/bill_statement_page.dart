@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../db/database_helper.dart';
 import '../models/bill_item.dart';
 import '../providers/bill_provider.dart';
+import '../providers/payment_method_provider.dart';
 import '../theme/app_theme.dart';
 import '../utils/format.dart';
 import '../widgets/payment_method_widgets.dart';
@@ -138,6 +139,13 @@ class _BillStatementPageState extends ConsumerState<BillStatementPage> {
 
   @override
   Widget build(BuildContext context) {
+    ref.watch(paymentMethodsProvider);
+    ref.listen(paymentMethodsProvider, (_, next) {
+      final ids = (next.value ?? const []).map((e) => e.id).toSet();
+      if (_selectedPaymentMethod.isNotEmpty && !ids.contains(_selectedPaymentMethod)) {
+        setState(() => _selectedPaymentMethod = '');
+      }
+    });
     ref.watch(billListProvider);
 
     return Scaffold(

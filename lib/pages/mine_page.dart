@@ -13,11 +13,13 @@ import '../providers/badge_provider.dart';
 import '../providers/category_provider.dart';
 import '../providers/user_stats_provider.dart';
 import '../providers/wallet_provider.dart';
+import '../providers/payment_method_provider.dart';
 import '../services/export_service.dart';
 import '../services/import_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/icon_helper.dart';
 import 'badge_page.dart';
+import 'payment_method_manager_page.dart';
 import '../widgets/wallet_switcher_sheet.dart';
 
 /// 「我的」页面
@@ -37,6 +39,8 @@ class MinePage extends ConsumerWidget {
           _MineHeader(),
           SizedBox(height: 36 + 12),
           _WalletCard(),
+          SizedBox(height: 12),
+          _PaymentMethodCard(),
           SizedBox(height: 12),
           _AchievementCard(),
           SizedBox(height: 12),
@@ -298,6 +302,34 @@ class _AchievementCard extends StatelessWidget {
             Navigator.of(
               context,
             ).push(MaterialPageRoute<void>(builder: (_) => const BadgePage()));
+          },
+        ),
+      ],
+    );
+  }
+}
+
+class _PaymentMethodCard extends ConsumerWidget {
+  const _PaymentMethodCard();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    ref.watch(paymentMethodsProvider);
+    return _SectionCard(
+      title: '支付方式',
+      children: [
+        _NavTile(
+          leading: const Icon(
+            Icons.payments_outlined,
+            size: 22,
+            color: AppColors.primaryDark,
+          ),
+          title: '支付方式管理',
+          subtitle: '新增、改名、排序和删除支付方式',
+          onTap: () {
+            Navigator.of(context).push(
+              MaterialPageRoute<void>(builder: (_) => const PaymentMethodManagerPage()),
+            );
           },
         ),
       ],
@@ -688,6 +720,7 @@ class _ImportCard extends ConsumerWidget {
               _previewRow('导出时间', preview.exportedAt),
               const Divider(height: 16),
               _previewRow('钱包', '${preview.walletCount} 个'),
+              _previewRow('支付方式', '${preview.paymentMethodCount} 个'),
               _previewRow('账单记录', '${preview.recordCount} 条'),
               _previewRow('预算', '${preview.budgetCount} 条'),
               _previewRow('资产', '${preview.assetCount} 条'),
@@ -739,6 +772,7 @@ class _ImportCard extends ConsumerWidget {
       ref.invalidate(walletsProvider);
       ref.invalidate(currentWalletProvider);
       ref.invalidate(currentWalletIdProvider);
+      ref.invalidate(paymentMethodsProvider);
       ref.invalidate(userStatsProvider);
       ref.invalidate(badgeProvider);
 
@@ -754,6 +788,8 @@ class _ImportCard extends ConsumerWidget {
               _previewRow('总记录数', '${importResult.totalRecords}'),
               if (importResult.importedWallets > 0)
                 _previewRow('新增钱包', '${importResult.importedWallets} 个'),
+              if (importResult.importedPaymentMethods > 0)
+                _previewRow('支付方式', '${importResult.importedPaymentMethods} 个'),
               _previewRow('成功导入', '${importResult.insertedBills} 条'),
               if (importResult.importedBudgets > 0)
                 _previewRow('新增预算', '${importResult.importedBudgets} 条'),

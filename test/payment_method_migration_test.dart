@@ -133,6 +133,13 @@ void main() {
       isTrue,
     );
 
+    final methods = await db.query('payment_methods');
+    expect(methods, hasLength(3));
+    expect(
+      methods.map((row) => row['name']).toSet(),
+      containsAll(['微信', '支付宝', '银行卡']),
+    );
+
     final rows = await db.rawQuery('SELECT payment_method FROM bills WHERE id = ?', ['bill_1']);
     expect(rows, hasLength(1));
     expect(rows.single['payment_method'], PaymentMethod.wechat);

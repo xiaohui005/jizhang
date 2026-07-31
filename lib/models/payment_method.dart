@@ -7,6 +7,8 @@ class PaymentMethod {
 
   static String normalize(String? value) {
     final trimmed = value?.trim();
-    return values.contains(trimmed) ? trimmed! : wechat;
+    return trimmed == null || trimmed.isEmpty ? wechat : trimmed;
   }
+
+  static bool isBuiltin(String value) => values.contains(value);
 }

@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../theme/app_theme.dart';
 import '../models/payment_method.dart';
 import 'payment_method_widgets.dart';
 import 'date_picker.dart';
 import 'note_editor.dart';
+import '../providers/payment_method_provider.dart';
 
-class CalculatorKeyboard extends StatefulWidget {
+class CalculatorKeyboard extends ConsumerStatefulWidget {
   const CalculatorKeyboard({
     super.key,
     required this.onComplete,
@@ -33,10 +35,10 @@ class CalculatorKeyboard extends StatefulWidget {
   final VoidCallback? onClose;
 
   @override
-  State<CalculatorKeyboard> createState() => _CalculatorKeyboardState();
+  ConsumerState<CalculatorKeyboard> createState() => _CalculatorKeyboardState();
 }
 
-class _CalculatorKeyboardState extends State<CalculatorKeyboard>
+class _CalculatorKeyboardState extends ConsumerState<CalculatorKeyboard>
     with WidgetsBindingObserver {
   static const int _maxIntegerDigits = 8;
   static const int _maxDecimalDigits = 2;
@@ -254,6 +256,7 @@ class _CalculatorKeyboardState extends State<CalculatorKeyboard>
 
   @override
   Widget build(BuildContext context) {
+    ref.watch(paymentMethodsProvider);
     final mediaQuery = MediaQuery.of(context);
     if (mediaQuery.viewInsets.bottom <= 0) {
       final platformBottomSafeArea = _readPlatformBottomSafeArea();
@@ -337,7 +340,17 @@ class _CalculatorKeyboardState extends State<CalculatorKeyboard>
   }
 
   Widget _buildPaymentMethodBar() {
-    final options = PaymentMethod.values;
+    final options = paymentMethodFilterValues().skip(1).toList();
+    final selectedPaymentMethod = options.contains(_paymentMethod)
+        ? _paymentMethod
+        : (options.isNotEmpty ? options.first : _paymentMethod);
+    if (_paymentMethod != selectedPaymentMethod) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          setState(() => _paymentMethod = selectedPaymentMethod);
+        }
+      });
+    }
     return Container(
       margin: const EdgeInsets.fromLTRB(12, 2, 12, 8),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -357,7 +370,7 @@ class _CalculatorKeyboardState extends State<CalculatorKeyboard>
           ),
           Expanded(
             child: ToggleButtons(
-              isSelected: [for (final method in options) method == _paymentMethod],
+              isSelected: [for (final method in options) method == selectedPaymentMethod],
               onPressed: (index) {
                 setState(() => _paymentMethod = options[index]);
               },

@@ -6,6 +6,7 @@ import '../models/asset_item.dart';
 import '../models/bill_item.dart';
 import '../models/budget_item.dart';
 import '../models/payment_method.dart';
+import '../models/payment_method_item.dart';
 import '../models/wallet_item.dart';
 
 /// myapp 导出的 JSON 中单条账单记录的结构
@@ -56,10 +57,17 @@ class _ImportedRecord {
     );
   }
 
-  BillItem toModel(String fallbackWalletId, {String? idOverride}) {
+  BillItem toModel(
+    String fallbackWalletId, {
+    String? idOverride,
+    required Set<String> allowedPaymentMethods,
+  }) {
+    final resolvedPaymentMethod = allowedPaymentMethods.contains(paymentMethod)
+        ? paymentMethod
+        : PaymentMethod.wechat;
     return BillItem(
       id: (idOverride ?? id).isEmpty
-          ? 'import_${date}_${amount}_${category}_${paymentMethod}'
+          ? 'import_${date}_${amount}_${category}_${resolvedPaymentMethod}'
           : (idOverride ?? id),
       walletId: walletId.isEmpty ? fallbackWalletId : walletId,
       type: type,
@@ -67,7 +75,7 @@ class _ImportedRecord {
       category: category,
       note: note,
       date: date,
-      paymentMethod: paymentMethod,
+      paymentMethod: resolvedPaymentMethod,
       sortAt: sortAt.isEmpty ? date : sortAt,
       iconId: iconId,
       createdAt: createdAt.isEmpty ? DateTime.now().toIso8601String() : createdAt,
@@ -102,6 +110,46 @@ class _ImportedWallet {
     return WalletItem(
       id: id,
       name: name,
+      createdAt: createdAt.isEmpty ? DateTime.now().toIso8601String() : createdAt,
+      updatedAt: updatedAt.isEmpty ? DateTime.now().toIso8601String() : updatedAt,
+    );
+  }
+}
+
+class _ImportedPaymentMethod {
+  final String id;
+  final String name;
+  final int sortOrder;
+  final bool isDefault;
+  final String createdAt;
+  final String updatedAt;
+
+  const _ImportedPaymentMethod({
+    required this.id,
+    required this.name,
+    required this.sortOrder,
+    required this.isDefault,
+    required this.createdAt,
+    required this.updatedAt,
+  });
+
+  factory _ImportedPaymentMethod.fromJson(Map<String, dynamic> json) {
+    return _ImportedPaymentMethod(
+      id: (json['id'] as String?) ?? '',
+      name: (json['name'] as String?) ?? '',
+      sortOrder: (json['sort_order'] as int?) ?? 0,
+      isDefault: (json['is_default'] as int?) == 1,
+      createdAt: (json['created_at'] as String?) ?? '',
+      updatedAt: (json['updated_at'] as String?) ?? '',
+    );
+  }
+
+  PaymentMethodItem toModel() {
+    return PaymentMethodItem(
+      id: id,
+      name: name,
+      sortOrder: sortOrder,
+      isDefault: isDefault,
       createdAt: createdAt.isEmpty ? DateTime.now().toIso8601String() : createdAt,
       updatedAt: updatedAt.isEmpty ? DateTime.now().toIso8601String() : updatedAt,
     );
@@ -239,6 +287,7 @@ class _ImportData {
   final String source;
   final String exportedAt;
   final List<_ImportedWallet> wallets;
+  final List<_ImportedPaymentMethod> paymentMethods;
   final List<_ImportedRecord> records;
   final List<_ImportedBudget> budgets;
   final List<_ImportedAsset> assets;
@@ -249,6 +298,7 @@ class _ImportData {
     required this.source,
     required this.exportedAt,
     required this.wallets,
+    required this.paymentMethods,
     required this.records,
     required this.budgets,
     required this.assets,
@@ -259,6 +309,7 @@ class _ImportData {
     final recordsRaw = (json['records'] as List<dynamic>?) ?? [];
     final billsRaw = (json['bills'] as List<dynamic>?) ?? recordsRaw;
     final walletsRaw = (json['wallets'] as List<dynamic>?) ?? [];
+    final paymentMethodsRaw = (json['payment_methods'] as List<dynamic>?) ?? [];
     final budgetsRaw = (json['budgets'] as List<dynamic>?) ?? [];
     final assetsRaw = (json['assets'] as List<dynamic>?) ?? [];
     final catsRaw = (json['categories'] as Map<String, dynamic>?) ?? {};
@@ -281,6 +332,9 @@ class _ImportData {
       wallets: walletsRaw
           .map((w) => _ImportedWallet.fromJson(w as Map<String, dynamic>))
           .toList(),
+      paymentMethods: paymentMethodsRaw
+          .map((m) => _ImportedPaymentMethod.fromJson(m as Map<String, dynamic>))
+          .toList(),
       records: billsRaw
           .map((r) => _ImportedRecord.fromJson(r as Map<String, dynamic>))
           .toList(),
@@ -300,6 +354,7 @@ class ImportResult {
   final int totalRecords;
   final int insertedBills;
   final int skippedBills;
+  final int importedPaymentMethods;
   final int importedCategories;
   final int importedWallets;
   final int importedBudgets;
@@ -309,6 +364,7 @@ class ImportResult {
     required this.totalRecords,
     required this.insertedBills,
     required this.skippedBills,
+    required this.importedPaymentMethods,
     required this.importedCategories,
     required this.importedWallets,
     required this.importedBudgets,
@@ -335,6 +391,7 @@ class ImportService {
     int importedWallets = 0;
     int insertedBills = 0;
     int skippedBills = 0;
+    int importedPaymentMethods = 0;
     int importedCategories = 0;
     int importedBudgets = 0;
     int importedAssets = 0;
@@ -347,6 +404,17 @@ class ImportService {
       existingWalletIds.add(wallet.id);
       importedWallets++;
     }
+
+    // 支付方式按 id 合并，保留本地已有条目。
+    final existingPaymentMethods = await _db.getPaymentMethods();
+    final existingPaymentMethodIds = existingPaymentMethods.map((m) => m.id).toSet();
+    for (final method in data.paymentMethods) {
+      final model = method.toModel();
+      await _db.upsertPaymentMethod(model);
+      existingPaymentMethodIds.add(model.id);
+      importedPaymentMethods++;
+    }
+    final allowedPaymentMethodIds = (await _db.getPaymentMethods()).map((m) => m.id).toSet();
 
     // 分类按 (in_ex, name) 合并。
     final existingCategories = await _db.getAllCategories();
@@ -413,7 +481,11 @@ class ImportService {
         skippedBills++;
         continue;
       }
-      final bill = record.toModel(fallbackWalletId, idOverride: id);
+      final bill = record.toModel(
+        fallbackWalletId,
+        idOverride: id,
+        allowedPaymentMethods: allowedPaymentMethodIds,
+      );
       await _db.insertBill(bill);
       insertedBills++;
       existingBillIds.add(bill.id);
@@ -445,6 +517,7 @@ class ImportService {
       totalRecords: data.records.length,
       insertedBills: insertedBills,
       skippedBills: skippedBills,
+      importedPaymentMethods: importedPaymentMethods,
       importedCategories: importedCategories,
       importedWallets: importedWallets,
       importedBudgets: importedBudgets,
@@ -459,6 +532,7 @@ class ImportService {
       source: data.source,
       exportedAt: data.exportedAt,
       walletCount: data.wallets.length,
+      paymentMethodCount: data.paymentMethods.length,
       recordCount: data.records.length,
       budgetCount: data.budgets.length,
       assetCount: data.assets.length,
@@ -534,6 +608,7 @@ class ImportPreview {
   final String source;
   final String exportedAt;
   final int walletCount;
+  final int paymentMethodCount;
   final int recordCount;
   final int budgetCount;
   final int assetCount;
@@ -545,6 +620,7 @@ class ImportPreview {
     required this.source,
     required this.exportedAt,
     required this.walletCount,
+    required this.paymentMethodCount,
     required this.recordCount,
     required this.budgetCount,
     required this.assetCount,
