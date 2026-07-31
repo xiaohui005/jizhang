@@ -29,7 +29,7 @@ class BillItem {
     required this.iconId,
     required this.createdAt,
     required this.updatedAt,
-  }) : paymentMethod = PaymentMethod.normalize(paymentMethod);
+  }) : paymentMethod = paymentMethod;
 
   Map<String, dynamic> toMap() {
     return {
