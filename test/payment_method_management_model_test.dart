@@ -60,6 +60,9 @@ void main() {
       ),
     );
 
+    final storedBill = await db.getBillById('bill_cash');
+    expect(storedBill?.paymentMethod, cashId);
+
     await db.replacePaymentMethodOnBills(fromId: cashId, toId: PaymentMethod.wechat);
     await db.deletePaymentMethod(cashId);
 

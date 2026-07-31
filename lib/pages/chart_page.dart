@@ -278,8 +278,6 @@ class _ChartPageState extends ConsumerState<ChartPage> {
   }
 
   Widget _buildPaymentMethodFilter() {
-    final options = paymentMethodFilterValues();
-
     return Container(
       color: AppColors.primary.withValues(alpha: 0.18),
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
@@ -294,12 +292,10 @@ class _ChartPageState extends ConsumerState<ChartPage> {
             ),
           ),
           const SizedBox(width: 10),
-          DropdownButtonHideUnderline(
-            child: DropdownButton<String>(
-              value: _selectedPaymentMethod,
-              isDense: true,
+          Expanded(
+            child: PaymentMethodFilterStrip(
+              selectedMethod: _selectedPaymentMethod,
               onChanged: (value) {
-                if (value == null) return;
                 setState(() {
                   _selectedPaymentMethod = value;
                   _expandedCategoryByPeriod[ref.read(chartPeriodProvider)] = null;
@@ -307,16 +303,6 @@ class _ChartPageState extends ConsumerState<ChartPage> {
                 });
                 _loadData();
               },
-              items: [
-                for (final method in options)
-                  DropdownMenuItem<String>(
-                    value: method,
-                    child: Text(
-                      method.isEmpty ? '全部' : paymentMethodLabel(method),
-                      style: const TextStyle(fontSize: 12),
-                    ),
-                  ),
-              ],
             ),
           ),
         ],

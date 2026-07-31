@@ -218,8 +218,6 @@ class _BillStatementPageState extends ConsumerState<BillStatementPage> {
   }
 
   Widget _buildPaymentMethodFilter() {
-    final options = paymentMethodFilterValues();
-
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 6),
       child: Row(
@@ -233,24 +231,10 @@ class _BillStatementPageState extends ConsumerState<BillStatementPage> {
             ),
           ),
           const SizedBox(width: 10),
-          DropdownButtonHideUnderline(
-            child: DropdownButton<String>(
-              value: _selectedPaymentMethod,
-              isDense: true,
-              onChanged: (value) {
-                if (value == null) return;
-                setState(() => _selectedPaymentMethod = value);
-              },
-              items: [
-                for (final method in options)
-                  DropdownMenuItem<String>(
-                    value: method,
-                    child: Text(
-                      method.isEmpty ? '全部' : paymentMethodLabel(method),
-                      style: const TextStyle(fontSize: 12),
-                    ),
-                  ),
-              ],
+          Expanded(
+            child: PaymentMethodFilterStrip(
+              selectedMethod: _selectedPaymentMethod,
+              onChanged: (value) => setState(() => _selectedPaymentMethod = value),
             ),
           ),
         ],

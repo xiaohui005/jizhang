@@ -68,3 +68,71 @@ class PaymentMethodBadge extends ConsumerWidget {
     );
   }
 }
+
+class PaymentMethodFilterStrip extends StatelessWidget {
+  const PaymentMethodFilterStrip({
+    super.key,
+    required this.selectedMethod,
+    required this.onChanged,
+  });
+
+  final String selectedMethod;
+  final ValueChanged<String> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final options = paymentMethodFilterValues();
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: [
+          for (var i = 0; i < options.length; i++) ...[
+            _PaymentMethodFilterButton(
+              label: paymentMethodLabel(options[i]),
+              selected: options[i] == selectedMethod,
+              onPressed: () => onChanged(options[i]),
+            ),
+            if (i != options.length - 1) const SizedBox(width: 8),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _PaymentMethodFilterButton extends StatelessWidget {
+  const _PaymentMethodFilterButton({
+    required this.label,
+    required this.selected,
+    required this.onPressed,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final background = selected ? AppColors.primary : Colors.white;
+    final foreground = selected ? Colors.white : AppColors.textPrimary;
+    return SizedBox(
+      height: 30,
+      child: TextButton(
+        onPressed: onPressed,
+        style: TextButton.styleFrom(
+          backgroundColor: background,
+          foregroundColor: foreground,
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          minimumSize: const Size(0, 30),
+          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          side: BorderSide(color: AppColors.textPrimary.withAlpha(80)),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+        ),
+        child: Text(
+          label,
+          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+        ),
+      ),
+    );
+  }
+}
