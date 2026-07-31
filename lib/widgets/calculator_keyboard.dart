@@ -358,7 +358,8 @@ class _CalculatorKeyboardState extends ConsumerState<CalculatorKeyboard>
         color: const Color(0xFFF7F7F7),
         borderRadius: BorderRadius.circular(6),
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             '支付方式：',
@@ -368,26 +369,27 @@ class _CalculatorKeyboardState extends ConsumerState<CalculatorKeyboard>
               fontWeight: FontWeight.w500,
             ),
           ),
-          Expanded(
-            child: ToggleButtons(
-              isSelected: [for (final method in options) method == selectedPaymentMethod],
-              onPressed: (index) {
-                setState(() => _paymentMethod = options[index]);
-              },
-              borderRadius: BorderRadius.circular(8),
-              constraints: const BoxConstraints(minHeight: 32, minWidth: 64),
-              textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
-              selectedColor: Colors.white,
-              fillColor: AppColors.primary,
-              color: AppColors.textSecondary,
-              children: [
-                for (final method in options)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 10),
-                    child: Text(paymentMethodLabel(method)),
-                  ),
-              ],
-            ),
+          const SizedBox(height: 8),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              const spacing = 8.0;
+              final itemWidth = (constraints.maxWidth - spacing * 3) / 4;
+              return Wrap(
+                spacing: spacing,
+                runSpacing: 8,
+                children: [
+                  for (final method in options)
+                    SizedBox(
+                      width: itemWidth,
+                      child: _PaymentMethodChip(
+                        label: paymentMethodLabel(method),
+                        selected: method == selectedPaymentMethod,
+                        onPressed: () => setState(() => _paymentMethod = method),
+                      ),
+                    ),
+                ],
+              );
+            },
           ),
         ],
       ),
@@ -460,5 +462,44 @@ class _CalculatorKeyboardState extends ConsumerState<CalculatorKeyboard>
         child: const Text('完成', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
       ),
     ));
+  }
+}
+
+class _PaymentMethodChip extends StatelessWidget {
+  const _PaymentMethodChip({
+    required this.label,
+    required this.selected,
+    required this.onPressed,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 32,
+      child: TextButton(
+        onPressed: onPressed,
+        style: TextButton.styleFrom(
+          padding: const EdgeInsets.symmetric(horizontal: 8),
+          minimumSize: const Size(0, 32),
+          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          backgroundColor: selected ? AppColors.primary : Colors.white,
+          foregroundColor: selected ? Colors.white : AppColors.textPrimary,
+          side: BorderSide(
+            color: selected ? AppColors.primary : AppColors.textSecondary.withAlpha(90),
+          ),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+        ),
+        child: Text(
+          label,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+        ),
+      ),
+    );
   }
 }
