@@ -1,0 +1,58 @@
+name: build-ipa
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Pub get
+        run: flutter pub get
+
+      - name: Build unsigned iOS app
+        run: flutter build ios --release --no-codesign
+
+      - name: Package unsigned IPA
+        run: |
+          set -euo pipefail
+          test -d build/ios/iphoneos/Runner.app
+          rm -rf build/ios/ipa-unsigned
+          mkdir -p build/ios/ipa-unsigned/Payload
+          cp -R build/ios/iphoneos/Runner.app build/ios/ipa-unsigned/Payload/Runner.app
+          (
+            cd build/ios/ipa-unsigned
+            ditto -c -k --sequesterRsrc --keepParent Payload ../ledger_flutter-unsigned.ipa
+          )
+          unzip -t build/ios/ledger_flutter-unsigned.ipa
+          unzip -p build/ios/ledger_flutter-unsigned.ipa Payload/Runner.app/Info.plist > /dev/null
+
+      - name: Upload unsigned IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: ledger_flutter-unsigned-ipa
+          path: build/ios/ledger_flutter-unsigned.ipa
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Publish unsigned IPA
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: build/ios/ledger_flutter-unsigned.ipa
