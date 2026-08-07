@@ -2,76 +2,34 @@
 
 > **对于代理工作者：** 必需子技能：使用 superpowers:subagent-driven-development（推荐）或 superpowers:executing-plans 来逐任务实施此计划。步骤使用复选框（`- [ ]`）语法进行跟踪。
 
-**目标：** 补齐 Flutter iOS CocoaPods 配置，并通过独立 GitHub Actions 工作流生成可供外部重签的无签名 IPA。
+**目标：** 使用 Flutter 的 Swift Package Manager 插件集成，并通过独立 GitHub Actions 工作流生成可供外部重签的无签名 IPA。
 
-**架构：** iOS 配置和 CI 与现有 Android 构建完全隔离。macOS Runner 无签名编译 `Runner.app`，再按 `Payload/Runner.app` 标准结构封装 IPA，并在上传前验证压缩包内容。
+**架构：** iOS 配置和 CI 与现有 Android 构建完全隔离。macOS Runner 通过 Swift Package Manager 解析插件，无签名编译 `Runner.app`，再按 `Payload/Runner.app` 标准结构封装 IPA，并在上传前验证压缩包内容。
 
-**技术栈：** Flutter stable、CocoaPods、GitHub Actions、macOS `ditto`、`unzip`
+**技术栈：** Flutter stable、Swift Package Manager、GitHub Actions、macOS `ditto`、`unzip`
 
 ---
 
-### 任务 1：补齐 CocoaPods 配置
+### 任务 1：保持 Swift Package Manager 单一依赖管理
 
 **文件：**
-- 创建：`ios/Podfile`
+- 删除：`ios/Podfile`
 
-- [x] **步骤 1：确认 Podfile 当前缺失**
+- [x] **步骤 1：运行回归断言并确认失败**
 
-运行：`git ls-files --error-unmatch ios/Podfile`
+运行：`if (Test-Path -LiteralPath "ios/Podfile") { exit 1 }`
 
-预期：命令失败，并提示 `ios/Podfile` 不在版本库中。
+预期：退出码为 1，证明新增的 Podfile 违反 Swift Package Manager 单一集成约束。
 
-- [x] **步骤 2：创建标准 Flutter Podfile**
+- [x] **步骤 2：删除 Podfile**
 
-写入：
+删除 `ios/Podfile`，不修改 Xcode 工程。原工程没有 Pods 文件引用、`[CP]` 构建阶段或 Pods workspace 引用。
 
-```ruby
-platform :ios, '13.0'
+- [x] **步骤 3：重新运行回归断言**
 
-ENV['COCOAPODS_DISABLE_STATS'] = 'true'
+运行：`if (Test-Path -LiteralPath "ios/Podfile") { exit 1 }; "PASS: no CocoaPods Podfile"`
 
-project 'Runner', {
-  'Debug' => :debug,
-  'Profile' => :release,
-  'Release' => :release,
-}
-
-def flutter_root
-  generated_xcode_build_settings_path = File.expand_path(File.join('..', 'Flutter', 'Generated.xcconfig'), __FILE__)
-  unless File.exist?(generated_xcode_build_settings_path)
-    raise "#{generated_xcode_build_settings_path} must exist. Run flutter pub get first."
-  end
-
-  File.foreach(generated_xcode_build_settings_path) do |line|
-    matches = line.match(/FLUTTER_ROOT\=(.*)/)
-    return matches[1].strip if matches
-  end
-  raise "FLUTTER_ROOT not found in #{generated_xcode_build_settings_path}."
-end
-
-require File.expand_path(File.join('packages', 'flutter_tools', 'bin', 'podhelper'), flutter_root)
-
-flutter_ios_podfile_setup
-
-target 'Runner' do
-  flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
-  target 'RunnerTests' do
-    inherit! :search_paths
-  end
-end
-
-post_install do |installer|
-  installer.pods_project.targets.each do |target|
-    flutter_additional_ios_build_settings(target)
-  end
-end
-```
-
-- [x] **步骤 3：静态检查 Podfile 的关键约束**
-
-运行：`rg "platform :ios, '13.0'|flutter_install_all_ios_pods|flutter_additional_ios_build_settings" ios/Podfile`
-
-预期：输出三处匹配，分别确认最低系统版本、插件安装和 Pod 构建设置。
+预期：输出 `PASS: no CocoaPods Podfile`，退出码为 0。
 
 ### 任务 2：新增无签名 IPA 工作流
 
@@ -158,7 +116,7 @@ jobs:
 ### 任务 3：验证改动范围和配置
 
 **文件：**
-- 验证：`ios/Podfile`
+- 验证删除：`ios/Podfile`
 - 验证：`.github/workflows/build-ipa.yml`
 - 验证未修改：`.github/workflows/build-apk.yml`
 - 验证未修改：`android/`
@@ -167,7 +125,7 @@ jobs:
 
 运行：`git status --short`
 
-预期：除已确认的设计和计划文档外，只新增 `ios/Podfile` 与 `.github/workflows/build-ipa.yml`。
+预期：`ios/Podfile` 显示为删除，设计和计划文档显示为修改，`.github/workflows/build-ipa.yml` 无改动。
 
 - [x] **步骤 2：确认 Android 构建配置零改动**
 

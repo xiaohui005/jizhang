@@ -2,13 +2,13 @@
 
 ## 目标
 
-为现有 Flutter 项目补齐 iOS CocoaPods 配置，并通过 GitHub Actions 生成可供外部签名工具重签的 Release IPA。
+通过 GitHub Actions 生成可供外部签名工具重签的 Release IPA，并沿用 Flutter 自动配置的 Swift Package Manager 集成。
 
 生成的 IPA 不包含有效的 Apple 分发签名，不能直接安装到普通 iPhone，也不能直接上传 App Store。用户下载后自行完成签名和分发。
 
 ## 范围
 
-- 新增标准 `ios/Podfile`，最低支持版本与 Xcode 工程保持为 iOS 13。
+- 保持项目不包含 `ios/Podfile`，避免与 Flutter 的 Swift Package Manager 插件集成冲突。
 - 新增独立的 `.github/workflows/build-ipa.yml`。
 - 支持从 GitHub Actions 页面手动触发。
 - 支持推送 `v*` 标签时自动构建，并把 IPA 附加到对应 GitHub Release。
@@ -31,18 +31,18 @@
 
 工作流不导入 Apple 证书、Provisioning Profile 或私钥，不需要新增 GitHub Secrets。产物名称明确包含 `unsigned`，避免被误认为可直接安装的已签名包。
 
-`Podfile` 采用 Flutter 标准插件集成方式，加载 `Generated.xcconfig` 中的 Flutter SDK 路径，并对所有 Pod Target 应用 Flutter iOS 构建设置。
+当前 Flutter 工具已确认所有 iOS 插件都可通过 Swift Package Manager 集成。工程不引入 CocoaPods，避免同时存在两套依赖管理机制以及 `Podfile.lock` sandbox 校验错误。
 
 ## 错误处理
 
-- Flutter 依赖解析、CocoaPods 集成或 iOS 编译失败时，工作流停止且不上传产物。
+- Flutter 依赖解析、Swift Package Manager 集成或 iOS 编译失败时，工作流停止且不上传产物。
 - `Runner.app` 不存在时，封装步骤停止并报告错误。
 - IPA 结构校验失败时，工作流停止，防止发布无效压缩包。
 - GitHub Release 上传只在标签构建中执行；手动构建只产生 Artifact。
 
 ## 验证标准
 
-- `Podfile` 可被 CocoaPods 解析，且平台版本为 iOS 13。
+- 仓库中不存在 `ios/Podfile`，Xcode 工程不包含 CocoaPods 构建阶段。
 - GitHub Actions 工作流 YAML 语法有效。
 - 工作流不引用任何 Apple 签名 Secret。
 - IPA 内部顶层为 `Payload`，并包含 `Payload/Runner.app/Info.plist`。
